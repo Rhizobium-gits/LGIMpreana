@@ -1,5 +1,5 @@
 # Homebrewでインストール（MacOSの場合）
-`bash``
+```sh
 brew install sbcl quicklisp
 ```
 

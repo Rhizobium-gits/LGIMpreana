@@ -1,15 +1,18 @@
-# Homebrewでインストール（MacOSの場合）
+### Homebrewでインストール（MacOSの場合）
 ```sh
 brew install sbcl quicklisp
 ```
 
-;; SLIME（Superior Lisp Interaction Mode）のインストール
+### SLIME（Superior Lisp Interaction Mode）のインストール
+```elisp
 (require 'package)
 (add-to-list 'package-archives
              '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
+```
 
-;; SLIME をインストール（未インストールの場合）
+### SLIME をインストール
+```elisp
 (unless (package-installed-p 'slime)
   (package-install 'slime))
 
@@ -19,5 +22,4 @@ brew install sbcl quicklisp
 ```
 
 または、Emacsコマンドラインから：
-```
 M-x package-install RET slime RET

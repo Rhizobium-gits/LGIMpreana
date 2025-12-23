@@ -1,6 +1,6 @@
 # LGIMpreana
 
-**counts版（`gut_microbiome_16S_mock_gravity_culture.csv`）を読み込んで、Lisp側でrelative/CLRを作る**のが、重力効果の可視化にもネットワークにも一番使い回せるので **counts版を使う**のがおすすめです。
+**counts版（`gut_microbiome_16S_mock_gravity_culture.csv`）を読み込んで，Lisp側でrelative/CLRを作る**のが、重力効果の可視化にもネットワークにも一番使い回せるので **counts版を使う**ことを推奨します．
 
 ---
 

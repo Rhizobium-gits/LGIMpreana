@@ -1,4 +1,4 @@
 ### SLIMEを起動
-'''lisp
+~~~lisp
 M-x slime
-'''
+~~~

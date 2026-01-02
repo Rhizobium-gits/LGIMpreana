@@ -1,5 +1,5 @@
 # Microbiome Prediction Model System
-## 腸内細菌叢 予測モデルパッケージ (Figure 7-13)
+## 模擬多重力 腸内細菌叢 予測モデルパッケージ (Figure 7-13) ただし使用にはその実験をした後の16S rRNAデータが必要
 
 ---
 

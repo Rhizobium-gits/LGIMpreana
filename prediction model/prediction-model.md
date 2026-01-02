@@ -7,14 +7,14 @@
 
 このパッケージは、腸内細菌叢の時間的動態を予測するための2つのモデルを提供します：
 
-1. **線形外挿モデル**: シンプルな予測（Figure 7）
+1. **線形外挿モデル**: シンプルな予測（Figure 7-9）
 2. **gLV（Generalized Lotka-Volterra）モデル**: 種間相互作用を考慮した動的予測（Figure 10-13）
 
 ---
 
 ## 手法の詳細
 
-### 1. 線形外挿モデル（Figure 7）
+### 1. 線形外挿モデル（Figure 7-9）
 
 #### 基本原理
 観測された変化率を外挿して将来の組成を予測します。
@@ -27,7 +27,19 @@
 変化率 Δp = (p(24h) - p(8h)) / 16時間
 ```
 
-#### Issues
+#### Figure 7: 48時間組成予測
+
+![Figure 7: Linear Prediction](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure7_Prediction.svg)
+
+#### Figure 8: 変化率ヒートマップ
+
+![Figure 8: Change Heatmap](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure8_ChangeHeatmap.svg)
+
+#### Figure 9: 予測不確実性
+
+![Figure 9: Uncertainty](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure9_Uncertainty.svg)
+
+#### 限界
 - 非線形ダイナミクスを捉えられない
 - 定常状態への収束を考慮しない
 - 種間相互作用を無視
@@ -55,6 +67,22 @@ dx_i/dt = x_i × (r_i + Σ_j A_ij × x_j)
 | A_ij > 0 | 促進 | 種 j が種 i の増殖を助ける（共生） |
 | A_ij < 0 | 阻害 | 種 j が種 i の増殖を抑制する（競争） |
 | A_ii < 0 | 自己制限 | 環境収容力（密度依存的死亡） |
+
+#### Figure 10: ドナー変動ヒートマップ
+
+![Figure 10: Donor Variability](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure10_DonorVariability.svg)
+
+#### Figure 11: 優占種動態
+
+![Figure 11: Dominant Taxa](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure11_DominantTaxa.svg)
+
+#### Figure 12: ネットワーク構造変化
+
+![Figure 12: Network Changes](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure12_NetworkChanges.svg)
+
+#### Figure 13: gLVネットワーク予測
+
+![Figure 13: gLV Network](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/challenge/prediction%20model/Figure/Figure13_gLV_Network.svg)
 
 ---
 
@@ -99,62 +127,7 @@ x_{n+1} = xₙ + Δt/6 × (k₁ + 2k₂ + 2k₃ + k₄)
 
 ---
 
-## 生成される図
-
-### Figure 7: 線形予測
-
-48時間後の組成予測（重力条件別）
-
-```
-┌─────────────────────────────────────────┐
-│  Linear Prediction: 48h Composition     │
-│                                         │
-│  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐        │
-│  │   │ │   │ │   │ │   │ │   │        │
-│  │ 0g│ │1/6│ │ 1g│ │Sta│ │ 5g│        │
-│  └───┘ └───┘ └───┘ └───┘ └───┘        │
-└─────────────────────────────────────────┘
-```
-
-### Figure 10: ドナー変動ヒートマップ
-
-ドナー × 重力条件の変動指数
-
-```
-       0g  1/6g  1g  Static  5g
-D1     ▓▓   ░░   ▓▓    ░░    ▓▓
-D2     ░░   ▓▓   ░░    ▓▓    ░░
-D3     ▓▓   ░░   ░░    ▓▓    ▓▓
-D4     ░░   ▓▓   ▓▓    ░░    ░░
-```
-
-### Figure 11: 優占種動態
-
-1g条件での上位5分類群の時間変化
-
-```
-Abundance
-    │    ──── Observed
-    │    ---- Predicted
-    │   ╭─╮
-    │  ╱   ╲    ╭────
-    │ ╱     ╲  ╱
-    │╱       ╲╱
-    └──────────────────
-    8h   16h   24h   48h  Time
-```
-
-### Figure 12: ネットワーク構造
-
-4つの指標：Connectance, Strength, Positive, Negative
-
-### Figure 13: gLV予測
-
-3条件（0g, 1g, 5g）での上位3分類群の予測
-
----
-
-## 🚀 使用方法
+## 使用方法
 
 ### クイックスタート
 
@@ -236,7 +209,7 @@ Abundance
 
 ---
 
-## 数学的背景
+## 📐 数学的背景
 
 ### Ridge回帰
 
@@ -332,7 +305,6 @@ prediction-model/
 ## ライセンス
 
 MIT License
-
 
 ## バージョン
 

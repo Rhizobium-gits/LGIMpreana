@@ -1,5 +1,5 @@
-# 腸内細菌叢解析における統計手法とアルゴリズム
-## Statistical Methods and Algorithms for Gut Microbiome Analysis
+# 腸内細菌叢解析とアルゴリズムのパイプライン
+## Statistical Methods and Algorithms for Gut Microbiome Analysis with Common Lisp
 
 ---
 

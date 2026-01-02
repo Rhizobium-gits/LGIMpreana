@@ -1,4 +1,4 @@
-# Lispので可視化
+#　Common Lispで可視化
 
 ## 概要
 

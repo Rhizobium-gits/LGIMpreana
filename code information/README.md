@@ -124,7 +124,7 @@ variance_explained[k] = eigenvalue[k] / sum(positive_eigenvalues) * 100
 **出力**: ドナー別の3パネル散布図。各点は1サンプルを表し、色は重力条件を示す。
 近い点は類似した群集構造を持つ。
 
-![Figure 1: PCoA](Figure1_PCoA.svg)
+![Figure 1: PCoA](Figure/Figure1_PCoA.svg)
 
 ---
 
@@ -599,7 +599,7 @@ x_normalized[i] = x[i] / Σ_j x[j]
 
 **出力**: 上位6種について、観測データ（点）と予測曲線（線）を表示
 
-![Figure 13: gLV Prediction](Figure13_gLVPrediction.svg)
+![Figure 13: gLV Prediction](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/refs/heads/main/code%20information/Figure/Figure13_gLVPrediction.svg)
 
 ---
 
@@ -756,7 +756,7 @@ Overall statistics (N=45 predictions):
 **出力**: 上位6種について、予測値（X軸）vs 実測値（Y軸）の散布図。
 対角線（y=x）に近いほど予測が正確。
 
-![Figure Validation](Figure_Validation.svg)
+![Figure Validation](https://raw.githubusercontent.com/Rhizobium-gits/LGIMpreana/refs/heads/main/code%20information/Figure/Figure_Validation.svg)
 
 ---
 

@@ -1,791 +1,317 @@
-# 腸内細菌叢解析における統計手法とアルゴリズム
-## Statistical Methods and Algorithms for Gut Microbiome Analysis
+# 腸内細菌叢動態予測モデル：仕組みと処理の流れ
+
+## 1. 研究の背景と目的
+
+### 1.1 データの特性と課題
+
+本研究で扱うデータは以下の構成を持つ：
+
+- **ドナー**: 3名（D1, D2, D3）
+- **重力条件**: 5種類（0g, 1/6g, 1g, 1g_s, 5g）
+- **時点**: 3点（8h, 16h, 24h）
+- **レプリケート**: 各3回
+- **細菌種**: 120属
+
+合計135サンプル、120次元の時系列データである。
+
+このデータには以下の課題がある：
+
+1. **時点数が少ない**: わずか3時点では動態の詳細な推定が困難
+2. **サンプル数の制約**: 各条件9サンプルでは統計的検出力が限られる
+3. **個人差が大きい**: ドナー間で細菌組成が大きく異なる
+4. **高次元性**: 120種の細菌に対してサンプル数が相対的に少ない
+
+このような「扱いにくいデータ」に対して、どこまで予測が可能かを検証した。
+
+### 1.2 予測の目標
+
+**8時間後と16時間後のデータのみを使って学習し、24時間後の細菌組成を予測する。**
+
+24時間後のデータは学習に一切使用せず、純粋な予測精度評価に用いる。
 
 ---
 
-## 目次
+## 2. 予測モデルの仕組み
 
-1. [データ前処理](#1-データ前処理)
-2. [Figure 1: 主座標分析 (PCoA)](#2-figure-1-主座標分析-pcoa)
-3. [Figure 2: 積み上げ棒グラフ](#3-figure-2-積み上げ棒グラフ)
-4. [Figure 3: 時系列軌跡](#4-figure-3-時系列軌跡)
-5. [Figure 4: β分散分析 (BETADISPER)](#5-figure-4-β分散分析-betadisper)
-6. [Figure 5: 分類群別存在量](#6-figure-5-分類群別存在量)
-7. [Figure 6: ヒートマップ](#7-figure-6-ヒートマップ)
-8. [PERMANOVA・SIMPER（統計検定）](#8-permanovasimper統計検定)
-9. [Figure 7-9: 線形予測モデル](#9-figure-7-9-線形予測モデル)
-10. [Figure 10-13: gLVネットワークダイナミクス](#10-figure-10-13-glvネットワークダイナミクス)
+### 2.1 基本的な考え方
 
----
+腸内細菌叢の変化は、以下の2つの要因で決まると仮定する：
 
-## 1. データ前処理
+1. **細菌間相互作用**: ある細菌が別の細菌の増殖を促進または抑制する
+2. **重力の影響**: 各重力条件が細菌の増殖に与える固有の効果
 
-### 1.1 相対存在量への変換
+これら2つを組み合わせて予測を行う「ハイブリッドモデル」を構築した。
 
-16S rRNA遺伝子シーケンシングから得られた生リードカウントを相対存在量に変換する。
+### 2.2 Generalized Lotka-Volterra（gLV）モデル
 
-**数式：**
+細菌間相互作用を記述するために、生態学で広く使われるgLVモデルを採用した。
 
-$$
-p_{ij} = \frac{x_{ij}}{\sum_{k=1}^{T} x_{ik}}
-$$
-
-ここで：
-- $x_{ij}$: サンプル $i$ における分類群 $j$ の生リードカウント
-- $T$: 総分類群数
-- $p_{ij}$: サンプル $i$ における分類群 $j$ の相対存在量（$0 \leq p_{ij} \leq 1$）
-
-**実装：**
-```lisp
-(defun get-relative-abundance (data)
-  (let* ((counts (microbiome-data-counts data))
-         (n-samples (matrix-rows counts))
-         (n-taxa (matrix-cols counts))
-         (result (make-array (list n-samples n-taxa))))
-    (dotimes (i n-samples result)
-      (let ((row-sum (loop for j from 0 below n-taxa
-                           sum (aref counts i j))))
-        (dotimes (j n-taxa)
-          (setf (aref result i j)
-                (if (> row-sum 0)
-                    (/ (aref counts i j) row-sum)
-                    0.0)))))))
+```
+dx_i/dt = x_i × (r_i + Σ_j A_ij × x_j)
 ```
 
-### 1.2 サンプルフィルタリング
+**各記号の意味**：
+- `x_i`: 細菌iの相対存在量（全体に占める割合、0〜1の値）
+- `r_i`: 細菌iの内在的増殖率（他の細菌がいない場合の増殖速度）
+- `A_ij`: 細菌jが細菌iに与える影響（相互作用係数）
 
-培養サンプル（8h, 16h, 24h）とベースラインサンプルを分離し、解析目的に応じて使い分ける。
+**相互作用係数 A_ij の解釈**：
+- `A_ij > 0`: 細菌jは細菌iの増殖を**促進**する（共生関係）
+- `A_ij < 0`: 細菌jは細菌iの増殖を**抑制**する（競争関係）
+- `A_ii < 0`: 自己抑制（環境収容力による制限）
+
+このモデルでは、120種 × 120種 = 14,400個の相互作用パラメータを推定する必要がある。
 
 ---
 
-## 2. Figure 1: 主座標分析 (PCoA)
+## 3. 処理の流れ
 
-### 2.1 理論的背景
+### Step 1: データの準備
 
-主座標分析（Principal Coordinates Analysis; PCoA）は、多次元スケーリング（MDS）の一種であり、距離行列を低次元空間に射影する手法である。Bray-Curtis距離のような非ユークリッド距離に対しても適用可能である点が主成分分析（PCA）との主な違いである。
+#### 1-1. 相対存在量への変換
 
-### 2.2 Bray-Curtis距離
+生のリード数を総リード数で割り、各サンプルの総和が1になるよう正規化する。
 
-細菌叢の組成的非類似度を定量化するためにBray-Curtis距離を使用する。
-
-**数式：**
-
-$$
-BC_{ij} = 1 - \frac{2 \sum_{k=1}^{T} \min(p_{ik}, p_{jk})}{\sum_{k=1}^{T} (p_{ik} + p_{jk})}
-$$
-
-ここで：
-- $BC_{ij}$: サンプル $i$ と $j$ 間のBray-Curtis距離（$0 \leq BC_{ij} \leq 1$）
-- $p_{ik}$: サンプル $i$ における分類群 $k$ の相対存在量
-
-**特性：**
-- $BC_{ij} = 0$: 完全に同一の組成
-- $BC_{ij} = 1$: 共通する分類群が存在しない
-
-**実装：**
-```lisp
-(defun bray-curtis (v1 v2)
-  (let ((sum-min 0.0d0)
-        (sum-total 0.0d0))
-    (dotimes (i (length v1))
-      (incf sum-min (min (aref v1 i) (aref v2 i)))
-      (incf sum-total (+ (aref v1 i) (aref v2 i))))
-    (if (> sum-total 0.0d0)
-        (- 1.0d0 (/ (* 2.0d0 sum-min) sum-total))
-        0.0d0)))
+```
+相対存在量 = リード数 / サンプル総リード数
 ```
 
-### 2.3 PCoAアルゴリズム
-
-**Step 1: 距離行列の二乗化**
-
-$$
-A_{ij} = -\frac{1}{2} BC_{ij}^2
-$$
-
-**Step 2: 中心化（Gower's centering）**
-
-$$
-G = HAH
-$$
-
-ここで $H$ は中心化行列：
-
-$$
-H = I_n - \frac{1}{n}\mathbf{1}\mathbf{1}^T
-$$
-
-- $I_n$: $n \times n$ 単位行列
-- $\mathbf{1}$: 全要素が1の $n$ 次元ベクトル
-
-**Step 3: 固有値分解**
-
-中心化行列 $G$ を固有値分解：
-
-$$
-G = U \Lambda U^T
-$$
-
-- $U$: 固有ベクトル行列
-- $\Lambda$: 固有値の対角行列（降順）
-
-**Step 4: 座標の計算**
-
-主座標は固有ベクトルと固有値の平方根の積：
-
-$$
-PC_k = U_k \sqrt{\lambda_k}
-$$
-
-**Step 5: 寄与率の計算**
-
-各軸の説明分散割合：
-
-$$
-\text{Var}_k (\%) = \frac{\lambda_k}{\sum_{i=1}^{n} \lambda_i} \times 100
-$$
-
-ただし、負の固有値は除外する。
-
-**実装：**
-```lisp
-(defun pcoa (distance-matrix)
-  (let* ((n (matrix-rows distance-matrix))
-         ;; Step 1: 二乗化
-         (A (make-array (list n n) :element-type 'double-float))
-         ;; Step 2: 中心化
-         (row-means (make-array n :initial-element 0.0d0))
-         (col-means (make-array n :initial-element 0.0d0))
-         (grand-mean 0.0d0))
-    
-    ;; A = -0.5 * D^2
-    (dotimes (i n)
-      (dotimes (j n)
-        (setf (aref A i j) 
-              (* -0.5d0 (expt (aref distance-matrix i j) 2)))))
-    
-    ;; 平均計算
-    (dotimes (i n)
-      (dotimes (j n)
-        (incf (aref row-means i) (aref A i j))
-        (incf (aref col-means j) (aref A i j))
-        (incf grand-mean (aref A i j))))
-    
-    (dotimes (i n)
-      (setf (aref row-means i) (/ (aref row-means i) n))
-      (setf (aref col-means i) (/ (aref col-means i) n)))
-    (setf grand-mean (/ grand-mean (* n n)))
-    
-    ;; Gower's centering: G_ij = A_ij - row_mean_i - col_mean_j + grand_mean
-    (let ((G (make-array (list n n) :element-type 'double-float)))
-      (dotimes (i n)
-        (dotimes (j n)
-          (setf (aref G i j)
-                (- (aref A i j)
-                   (aref row-means i)
-                   (aref col-means j)
-                   (- grand-mean)))))
-      
-      ;; Step 3: 固有値分解（べき乗法）
-      (multiple-value-bind (eigenvalues eigenvectors)
-          (power-iteration-symmetric G :n-components 10)
-        
-        ;; Step 4 & 5: 座標と寄与率
-        (let* ((positive-mask (mapcar (lambda (x) (> x 0)) eigenvalues))
-               (valid-eigenvalues (remove-if-not #'plusp eigenvalues))
-               (total-var (reduce #'+ valid-eigenvalues))
-               (var-explained (mapcar (lambda (x) (* 100 (/ x total-var)))
-                                      valid-eigenvalues)))
-          
-          ;; 座標 = eigenvector * sqrt(eigenvalue)
-          (let ((coords (make-array (list n (length valid-eigenvalues)))))
-            (loop for k from 0 below (length valid-eigenvalues)
-                  for lambda in valid-eigenvalues
-                  do (dotimes (i n)
-                       (setf (aref coords i k)
-                             (* (aref eigenvectors i k) (sqrt lambda)))))
-            
-            (values coords valid-eigenvalues var-explained)))))))
+例：あるサンプルでBacteroidesが10,000リード、総リード数が50,000の場合
+```
+Bacteroidesの相対存在量 = 10,000 / 50,000 = 0.20（20%）
 ```
 
-### 2.4 95%信頼楕円
+#### 1-2. 学習データとテストデータの分離
 
-各グループの重心周りに95%信頼楕円を描画する。
+- **学習データ**: 8h, 16hのサンプル（90サンプル）
+- **テストデータ**: 24hのサンプル（45サンプル）
 
-**数式：**
-
-楕円は共分散行列の固有ベクトルを軸とし、固有値の平方根にχ²分布の臨界値を乗じた長さを持つ。
-
-$$
-\text{半径} = \sqrt{\lambda_k \cdot \chi^2_{2, 0.95}}
-$$
-
-$\chi^2_{2, 0.95} \approx 5.991$（自由度2、95%信頼水準）
-
-**計算手順：**
-
-1. グループ $g$ の重心 $(\bar{x}_g, \bar{y}_g)$ を計算
-2. グループ内の共分散行列 $\Sigma_g$ を計算
-3. $\Sigma_g$ を固有値分解して楕円の軸と角度を決定
-4. パラメトリック曲線で楕円を描画
+24hのデータは学習には一切使用しない。
 
 ---
 
-## 3. Figure 2: 積み上げ棒グラフ
+### Step 2: 成長率の計算
 
-### 3.1 データ集約
+連続する時点間での細菌の増減速度を計算する。
 
-各重力条件×時点の組み合わせについて、ドナー間の平均相対存在量を計算。
+```
+成長率 = (log(存在量_t2) - log(存在量_t1)) / (t2 - t1)
+```
 
-**数式：**
+**なぜ対数を取るのか？**
 
-$$
-\bar{p}_{g,t,j} = \frac{1}{|D|} \sum_{d \in D} p_{g,t,d,j}
-$$
+細菌は指数関数的に増殖する。対数を取ることで、指数的な増殖が線形になり、回帰分析が適用できる。
 
-ここで：
-- $g$: 重力条件
-- $t$: 時点
-- $D$: ドナー集合
-- $j$: 分類群
+**具体例**：
+- 8hでBacteroidesが0.30、16hで0.45の場合
+```
+成長率 = (log(0.45) - log(0.30)) / 8 = (-0.80 - (-1.20)) / 8 = 0.05 /時間
+```
 
-### 3.2 上位分類群の選択
+これは「1時間あたり約5%ずつ対数スケールで増加」を意味する。
 
-全サンプルにわたる平均存在量が上位の分類群を選択（デフォルト: 上位15）。
-
-$$
-\text{Top } k = \text{argsort}_{j} \left( \frac{1}{N} \sum_{i=1}^{N} p_{ij} \right) [1:k]
-$$
-
-残りは "Others" としてまとめる。
+**収集される遷移データ**：
+- 3ドナー × 5重力条件 × 3レプリケート = 45組
+- 各組で8h→16hの遷移1つ
+- 合計約45遷移（一部は細菌が検出されず除外）
 
 ---
 
-## 4. Figure 3: 時系列軌跡
+### Step 3: gLVパラメータの推定（Ridge回帰）
 
-### 4.1 軌跡の描画
+#### 3-1. 回帰問題への変換
 
-PCoA空間における各サンプルの時間変化を追跡。同一ドナー・同一重力条件のサンプルを時間順に接続する。
+gLVモデルを変形すると、以下の線形回帰問題になる：
 
-**プロット要素：**
-- 点: 各時点のサンプル位置
-- 矢印: 時間経過の方向（8h → 16h → 24h）
-- 色: 重力条件ごとに異なる
+```
+成長率_i = r_i + A_i1×x_1 + A_i2×x_2 + ... + A_in×x_n
+```
+
+これは「成長率を、定数項（内在的増殖率）と各細菌の存在量の線形結合で説明する」という形式。
+
+#### 3-2. Ridge回帰の必要性
+
+通常の最小二乗法では問題が生じる：
+- **変数の数（121個）がサンプル数（45個）より多い**
+- → 解が一意に定まらない
+- → 過学習が起きる
+
+そこで、**Ridge回帰（L2正則化）** を用いる。
+
+```
+目的関数 = Σ(予測誤差)² + λ × Σ(パラメータ)²
+```
+
+第2項（正則化項）により：
+- パラメータが大きくなりすぎるのを防ぐ
+- 過学習を抑制する
+- 安定した推定が可能になる
+
+本実装では正則化パラメータ **λ = 0.5** を使用。
+
+#### 3-3. パラメータ推定の結果
+
+- 120個の内在的増殖率 r_i
+- 120 × 120 = 14,400個の相互作用係数 A_ij
+
+ただし、正則化により多くの係数は0に近い値に縮小される。
 
 ---
 
-## 5. Figure 4: β分散分析 (BETADISPER)
+### Step 4: 重力効果の定量化
 
-### 5.1 理論的背景
+gLVモデルだけでは捉えきれない、重力条件固有の効果を別途推定する。
 
-BETADISPER（Betadiversity Dispersion Analysis）は、グループ間のβ多様性の分散（均質性）を比較する手法である。各サンプルからグループ重心までの距離を計算し、その分散をグループ間で比較する。
+```
+重力効果[g][i] = (16h時点の平均存在量 - 8h時点の平均存在量) / 8
+```
 
-### 5.2 アルゴリズム
+これは「その重力条件下で、細菌iが1時間あたりどれだけ変化するか」を表す。
 
-**Step 1: グループ重心の計算**
+**計算例（0g条件のBacteroides）**：
+- 8h時点の平均: 0.35
+- 16h時点の平均: 0.34
+```
+重力効果 = (0.34 - 0.35) / 8 = -0.00125 /時間
+```
 
-PCoA座標空間でのグループ $g$ の重心：
+つまり「0g条件では、Bacteroidesは1時間あたり0.125%ずつ減少する傾向がある」。
 
-$$
-\mathbf{c}_g = \frac{1}{n_g} \sum_{i \in g} \mathbf{x}_i
-$$
+---
 
-**Step 2: 重心までの距離**
+### Step 5: 24時間後の予測
 
-各サンプルから所属グループの重心までのユークリッド距離：
+16時間後の観測値から、24時間後を予測する。
 
-$$
-d_{i,g} = \|\mathbf{x}_i - \mathbf{c}_g\|_2 = \sqrt{\sum_{k=1}^{K} (x_{ik} - c_{gk})^2}
-$$
+#### 5-1. gLVによる変化量の計算
 
-**Step 3: 分散の均一性検定（Permutation test）**
+推定した相互作用パラメータを使って、8時間分の変化を計算：
 
-帰無仮説: 全グループの分散は等しい
+```
+gLV変化量_i = x_i(16h) × (r_i + Σ_j A_ij × x_j(16h)) × 8
+```
 
-$$
-H_0: \sigma_1^2 = \sigma_2^2 = \cdots = \sigma_G^2
-$$
+#### 5-2. 重力効果による変化量の計算
 
-**F統計量（ANOVA）：**
+その重力条件の経験的トレンドから、8時間分の変化を計算：
 
-$$
-F = \frac{SS_{between} / (G - 1)}{SS_{within} / (N - G)}
-$$
+```
+重力変化量_i = 重力効果[g][i] × 8
+```
 
-ここで：
+#### 5-3. ハイブリッド予測
 
-$$
-SS_{between} = \sum_{g=1}^{G} n_g (\bar{d}_g - \bar{d})^2
-$$
+2つの変化量を半分ずつ重み付けして組み合わせる：
 
-$$
-SS_{within} = \sum_{g=1}^{G} \sum_{i \in g} (d_{i,g} - \bar{d}_g)^2
-$$
+```
+予測値(24h) = 観測値(16h) + 0.5 × gLV変化量 + 0.5 × 重力変化量
+```
 
-**Permutation test：**
+**なぜ組み合わせるのか？**
 
-1. 観測されたF統計量 $F_{obs}$ を計算
-2. グループラベルをランダムに並び替え（999回）
-3. 各並び替えについてF統計量 $F_{perm}^{(k)}$ を計算
-4. p値を計算：
+- gLVモデル: 細菌間相互作用を考慮するが、データが少なく不安定
+- 重力効果: 経験的トレンドを捉えるが、個別の相互作用は無視
 
-$$
-p = \frac{1 + \sum_{k=1}^{999} \mathbb{1}(F_{perm}^{(k)} \geq F_{obs})}{1000}
-$$
+両者を組み合わせることで、より安定した予測を目指す。
 
-**実装：**
-```lisp
-(defun betadisper (pcoa-coords groups)
-  (let ((distances-by-group (make-hash-table)))
-    ;; 各グループの重心と距離を計算
-    (dolist (g (remove-duplicates groups))
-      (let* ((indices (positions-of g groups))
-             (centroid (calculate-centroid pcoa-coords indices))
-             (distances (mapcar (lambda (i)
-                                  (euclidean-distance 
-                                   (row pcoa-coords i) centroid))
-                                indices)))
-        (setf (gethash g distances-by-group) distances)))
-    distances-by-group))
+#### 5-4. 正規化
 
-(defun permutation-test-dispersion (distances-by-group &key (n-perm 999))
-  (let* ((all-distances (flatten-hash-values distances-by-group))
-         (labels (generate-labels distances-by-group))
-         (observed-f (calculate-anova-f all-distances labels))
-         (n-greater 0))
-    
-    (dotimes (i n-perm)
-      (let* ((permuted-labels (shuffle labels))
-             (permuted-f (calculate-anova-f all-distances permuted-labels)))
-        (when (>= permuted-f observed-f)
-          (incf n-greater))))
-    
-    (/ (1+ n-greater) (1+ n-perm))))
+予測値を相対存在量として妥当な形に整える：
+
+1. 負の値を0にクリップ
+2. 総和が1になるよう正規化
+
+```
+最終予測値_i = max(0, 予測値_i) / Σ_j max(0, 予測値_j)
 ```
 
 ---
 
-## 6. Figure 5: 分類群別存在量
+## 4. 検証結果
 
-### 6.1 グループ別集計
+### 4.1 全体の精度
 
-各重力条件における分類群の平均存在量と標準偏差を計算。
+45サンプルの予測結果：
 
-**平均：**
+| 指標 | 値 | 解釈 |
+|------|-----|------|
+| 平均RMSE | 0.028 | 平均二乗誤差の平方根 |
+| 平均Bray-Curtis | 0.32 | 群集組成の約32%が異なる |
+| 平均相関係数 | 0.77 | 予測と実測に中程度の相関 |
 
-$$
-\bar{p}_{g,j} = \frac{1}{n_g} \sum_{i \in g} p_{ij}
-$$
+### 4.2 ドナー別の精度
 
-**標準偏差：**
+| ドナー | Bray-Curtis | 相関係数 |
+|--------|-------------|----------|
+| D1 | 0.25 | 0.84 |
+| D2 | 0.37 | 0.67 |
+| D3 | 0.34 | 0.73 |
 
-$$
-SD_{g,j} = \sqrt{\frac{1}{n_g - 1} \sum_{i \in g} (p_{ij} - \bar{p}_{g,j})^2}
-$$
+ドナー1の予測精度が高く、ドナー2は低い。個人差の影響が大きい。
 
-### 6.2 エラーバー
+### 4.3 細菌種別の精度
 
-95%信頼区間として $\bar{p} \pm 1.96 \times \frac{SD}{\sqrt{n}}$ を使用。
+| 細菌種 | 予測値 | 実測値 | バイアス | 相関 |
+|--------|--------|--------|----------|------|
+| Bacteroides | 0.49 | 0.21 | +0.28 | 0.97 |
+| Prevotella | 0.04 | 0.08 | -0.04 | 0.99 |
+| Staphylococcus | 0.11 | 0.16 | -0.05 | 0.87 |
 
----
-
-## 7. Figure 6: ヒートマップ
-
-### 7.1 Zスコア正規化
-
-分類群ごとにZスコアを計算し、サンプル間の相対的な増減を可視化。
-
-$$
-z_{ij} = \frac{p_{ij} - \mu_j}{\sigma_j}
-$$
-
-ここで：
-- $\mu_j = \frac{1}{N} \sum_{i=1}^{N} p_{ij}$: 分類群 $j$ の全サンプル平均
-- $\sigma_j$: 分類群 $j$ の標準偏差
-
-### 7.2 階層的クラスタリング
-
-ユークリッド距離と完全連結法（complete linkage）でサンプルと分類群をクラスタリング。
-
-**完全連結法：**
-
-$$
-D(A, B) = \max_{a \in A, b \in B} d(a, b)
-$$
+Bacteroidesは系統的に過大予測される傾向がある。
 
 ---
 
-## 8. PERMANOVA・SIMPER（統計検定）
+## 5. 結果の解釈
 
-### 8.1 PERMANOVA
+### 5.1 達成できたこと
 
-**理論：**
+- 相関係数0.77：予測と実測にある程度の線形関係がある
+- 個別細菌の相関は0.7〜0.99：主要な細菌の増減傾向は捉えている
+- 完全なランダム予測よりは明らかに良い
 
-PERMANOVA（Permutational Multivariate Analysis of Variance）は、距離行列に基づく多変量分散分析である。
+### 5.2 限界
 
-**疑似F統計量：**
+- Bray-Curtis 0.32：群集構造として約3割の差がある
+- 実用的な精度としては不十分
+- 特にドナー2の予測精度が低い
 
-$$
-F = \frac{SS_{between} / (G - 1)}{SS_{within} / (N - G)}
-$$
+### 5.3 精度が限られる原因
 
-距離行列から直接計算：
+1. **遷移データが少なすぎる**: 45遷移で14,400パラメータを推定
+2. **非線形な動態**: gLVは線形近似であり、真の動態を完全には捉えられない
+3. **ドナー間差**: 個人ごとに異なる相互作用パターンがある可能性
+4. **相対存在量の制約**: 絶対量でないため、組成的な制約がある
 
-$$
-SS_{total} = \frac{1}{N} \sum_{i<j} d_{ij}^2
-$$
+---
 
-$$
-SS_{within} = \sum_{g=1}^{G} \frac{1}{n_g} \sum_{i<j \in g} d_{ij}^2
-$$
+## 6. 処理フローのまとめ
 
-$$
-SS_{between} = SS_{total} - SS_{within}
-$$
-
-**Permutation test：**
-- 帰無仮説: グループ間に差がない
-- 999回の並び替えでp値を算出
-
-**実装：**
-```lisp
-(defun permanova (distance-matrix groups &key (n-perm 999))
-  (let* ((n (length groups))
-         (unique-groups (remove-duplicates groups))
-         (ss-total (calculate-ss-total distance-matrix n))
-         (ss-within (calculate-ss-within distance-matrix groups))
-         (ss-between (- ss-total ss-within))
-         (df-between (1- (length unique-groups)))
-         (df-within (- n (length unique-groups)))
-         (observed-f (/ (/ ss-between df-between)
-                        (/ ss-within df-within)))
-         (n-greater 0))
-    
-    ;; Permutation test
-    (dotimes (i n-perm)
-      (let* ((perm-groups (shuffle groups))
-             (perm-ss-within (calculate-ss-within distance-matrix perm-groups))
-             (perm-ss-between (- ss-total perm-ss-within))
-             (perm-f (/ (/ perm-ss-between df-between)
-                        (/ perm-ss-within df-within))))
-        (when (>= perm-f observed-f)
-          (incf n-greater))))
-    
-    (values observed-f (/ (1+ n-greater) (1+ n-perm)) ss-between ss-within)))
+```
+[入力データ]
+    ↓
+[Step 1] 相対存在量に変換 & データ分割
+    ↓
+[Step 2] 成長率の計算（対数変換）
+    ↓
+[Step 3] Ridge回帰でgLVパラメータ推定
+    ↓
+[Step 4] 重力効果の計算
+    ↓
+[Step 5] ハイブリッド予測
+    ├── gLV変化量（相互作用効果）
+    └── 重力変化量（経験的トレンド）
+    ↓
+[Step 6] 正規化（負値クリップ、総和=1）
+    ↓
+[出力] 24h時点の予測組成
 ```
 
-### 8.2 SIMPER
-
-**理論：**
-
-SIMPER（Similarity Percentages）は、グループ間の非類似度に対する各分類群の寄与度を分解する手法である。
-
-**各分類群の寄与：**
-
-$$
-\delta_{ij}^{(k)} = \frac{|p_{ik} - p_{jk}|}{\sum_{m=1}^{T} |p_{im} - p_{jm}|}
-$$
-
-**グループペア間の平均寄与：**
-
-$$
-\bar{\delta}_{AB}^{(k)} = \frac{1}{n_A \cdot n_B} \sum_{i \in A} \sum_{j \in B} \delta_{ij}^{(k)}
-$$
-
-**累積寄与率：**
-
-分類群を寄与度順にソートし、累積で70%に達するまでの分類群を報告。
-
 ---
 
-## 9. Figure 7-9: 線形予測モデル
+## 7. 結論
 
-### 9.1 線形外挿
+限られた時系列データ（3時点、45遷移）から、gLVモデルと重力効果を組み合わせたハイブリッドアプローチにより、相関係数0.77の予測精度を達成した。
 
-24時間時点から48時間時点への存在量変化を線形モデルで予測。
+これは「完全には予測できないが、全くのランダムでもない」という中間的な結果であり、データの制約を考慮すると妥当な精度である。
 
-**モデル：**
-
-$$
-\hat{p}_j(48h) = p_j(24h) + \Delta p_j
-$$
-
-ここで変化率は8-24h間の傾きから推定：
-
-$$
-\Delta p_j = \frac{p_j(24h) - p_j(8h)}{24 - 8} \times (48 - 24)
-$$
-
-### 9.2 不確実性の定量化
-
-ドナー間変動を考慮した95%信頼区間：
-
-$$
-CI_{95} = \hat{p}_j \pm 1.96 \times \frac{SD_{donors}}{\sqrt{n_{donors}}}
-$$
-
-### 9.3 制限事項
-
-線形モデルは以下を仮定：
-1. 変化率が一定
-2. 種間相互作用がない
-3. 環境容量（carrying capacity）の制約がない
-
-これらの制限を克服するためにgLVモデルを導入する。
-
----
-
-## 10. Figure 10-13: gLVネットワークダイナミクス
-
-### 10.1 一般化Lotka-Volterra (gLV) モデル
-
-**理論的背景：**
-
-細菌叢は複雑な生態系であり、種間相互作用（競争、共生、捕食）がダイナミクスを決定する。gLVモデルはこれらの相互作用を数理的に記述する。
-
-**モデル方程式：**
-
-$$
-\frac{dx_i}{dt} = x_i \left( r_i + \sum_{j=1}^{T} A_{ij} x_j \right)
-$$
-
-ここで：
-- $x_i$: 分類群 $i$ の存在量
-- $r_i$: 内因性成長率（intrinsic growth rate）
-- $A_{ij}$: 種 $j$ が種 $i$ に与える影響（相互作用係数）
-  - $A_{ij} > 0$: 種 $j$ は種 $i$ を促進（共生/相利）
-  - $A_{ij} < 0$: 種 $j$ は種 $i$ を抑制（競争/拮抗）
-  - $A_{ii} < 0$: 自己制限（環境容量による密度依存的抑制）
-
-### 10.2 パラメータ推定
-
-**Step 1: 成長率の変換**
-
-観測された存在量変化から対数成長率を計算：
-
-$$
-\frac{1}{x_i}\frac{dx_i}{dt} \approx \frac{\ln x_i(t+\Delta t) - \ln x_i(t)}{\Delta t} = r_i + \sum_{j} A_{ij} x_j(t)
-$$
-
-これを線形回帰問題として定式化：
-
-$$
-\mathbf{y}_i = \mathbf{X} \boldsymbol{\beta}_i
-$$
-
-ここで：
-- $\mathbf{y}_i$: 種 $i$ の各時点での成長率ベクトル
-- $\mathbf{X}$: デザイン行列（各時点での全種の存在量 + 切片項）
-- $\boldsymbol{\beta}_i = [r_i, A_{i1}, A_{i2}, \ldots, A_{iT}]^T$
-
-**Step 2: リッジ回帰**
-
-過学習を防ぐため、L2正則化を適用：
-
-$$
-\hat{\boldsymbol{\beta}}_i = \arg\min_{\boldsymbol{\beta}} \left\{ \|\mathbf{y}_i - \mathbf{X}\boldsymbol{\beta}\|_2^2 + \lambda \|\boldsymbol{\beta}\|_2^2 \right\}
-$$
-
-解析解：
-
-$$
-\hat{\boldsymbol{\beta}}_i = (\mathbf{X}^T\mathbf{X} + \lambda \mathbf{I})^{-1} \mathbf{X}^T \mathbf{y}_i
-$$
-
-**実装（Gauss-Seidel法）：**
-```lisp
-(defun estimate-glv-parameters (time-series &key (lambda-reg 0.01))
-  (let* ((n-taxa (length (cdr (first time-series))))
-         (A (make-array (list n-taxa n-taxa) :initial-element 0.0d0))
-         (r (make-array n-taxa :initial-element 0.0d0)))
-    
-    (dotimes (target n-taxa)
-      (let ((X-data '()) (y-data '()))
-        ;; データ点を構築
-        (loop for i from 0 below (1- (length time-series))
-              for t1 = (car (nth i time-series))
-              for t2 = (car (nth (1+ i) time-series))
-              for x1 = (cdr (nth i time-series))
-              for x2 = (cdr (nth (1+ i) time-series))
-              for dt = (- t2 t1)
-              for x-target = (aref x1 target)
-              when (and (> x-target 1e-8) (> dt 0))
-              do (let ((growth-rate (/ (- (aref x2 target) x-target) 
-                                       (* dt x-target))))
-                   (push (concatenate 'vector #(1.0) x1) X-data)
-                   (push growth-rate y-data)))
-        
-        ;; リッジ回帰
-        (when (>= (length y-data) 2)
-          (let ((beta (ridge-regression X-data y-data (1+ n-taxa) lambda-reg)))
-            (setf (aref r target) (aref beta 0))
-            (dotimes (j n-taxa)
-              (setf (aref A target j) (aref beta (1+ j))))))))
-    
-    ;; 自己制限を確保
-    (dotimes (i n-taxa)
-      (when (>= (aref A i i) 0.0d0)
-        (setf (aref A i i) -0.5d0)))
-    
-    (values A r)))
-```
-
-### 10.3 数値シミュレーション（Runge-Kutta法）
-
-**4次Runge-Kutta法：**
-
-微分方程式 $\frac{d\mathbf{x}}{dt} = \mathbf{f}(\mathbf{x}, t)$ を解く。
-
-$$
-\mathbf{k}_1 = \mathbf{f}(\mathbf{x}_n, t_n)
-$$
-
-$$
-\mathbf{k}_2 = \mathbf{f}\left(\mathbf{x}_n + \frac{\Delta t}{2}\mathbf{k}_1, t_n + \frac{\Delta t}{2}\right)
-$$
-
-$$
-\mathbf{k}_3 = \mathbf{f}\left(\mathbf{x}_n + \frac{\Delta t}{2}\mathbf{k}_2, t_n + \frac{\Delta t}{2}\right)
-$$
-
-$$
-\mathbf{k}_4 = \mathbf{f}(\mathbf{x}_n + \Delta t \mathbf{k}_3, t_n + \Delta t)
-$$
-
-$$
-\mathbf{x}_{n+1} = \mathbf{x}_n + \frac{\Delta t}{6}(\mathbf{k}_1 + 2\mathbf{k}_2 + 2\mathbf{k}_3 + \mathbf{k}_4)
-$$
-
-**gLVへの適用：**
-
-$$
-f_i(\mathbf{x}) = x_i \left( r_i + \sum_{j=1}^{T} A_{ij} x_j \right)
-$$
-
-**実装：**
-```lisp
-(defun glv-deriv (x r A)
-  "gLV方程式の右辺を計算"
-  (let* ((n (length x))
-         (dxdt (make-array n :initial-element 0.0d0)))
-    (dotimes (i n dxdt)
-      (let ((growth (aref r i)))
-        (dotimes (j n)
-          (incf growth (* (aref A i j) (aref x j))))
-        (setf (aref dxdt i) (* (aref x i) growth))))))
-
-(defun rk4-step (x r A dt)
-  "Runge-Kutta 4次法の1ステップ"
-  (let* ((n (length x))
-         (k1 (glv-deriv x r A))
-         (x-tmp (make-array n)))
-    
-    ;; k2
-    (dotimes (i n) 
-      (setf (aref x-tmp i) (+ (aref x i) (* 0.5 dt (aref k1 i)))))
-    (let ((k2 (glv-deriv x-tmp r A)))
-      
-      ;; k3
-      (dotimes (i n)
-        (setf (aref x-tmp i) (+ (aref x i) (* 0.5 dt (aref k2 i)))))
-      (let ((k3 (glv-deriv x-tmp r A)))
-        
-        ;; k4
-        (dotimes (i n)
-          (setf (aref x-tmp i) (+ (aref x i) (* dt (aref k3 i)))))
-        (let ((k4 (glv-deriv x-tmp r A))
-              (x-new (make-array n)))
-          
-          ;; 更新
-          (dotimes (i n x-new)
-            (setf (aref x-new i)
-                  (+ (aref x i)
-                     (* (/ dt 6.0)
-                        (+ (aref k1 i)
-                           (* 2.0 (aref k2 i))
-                           (* 2.0 (aref k3 i))
-                           (aref k4 i)))))))))))
-
-(defun simulate-glv (initial-state r A &key (t-end 24.0) (dt 0.5))
-  "gLVシミュレーション"
-  (let ((trajectory '())
-        (x (copy-seq initial-state))
-        (t-current 0.0))
-    
-    (push (cons t-current (copy-seq x)) trajectory)
-    
-    (loop while (< t-current t-end)
-          do (setf x (rk4-step x r A dt))
-             (incf t-current dt)
-             ;; 負の値を防止
-             (dotimes (i (length x))
-               (setf (aref x i) (max 0.0 (aref x i))))
-             ;; 正規化（相対存在量として）
-             (let ((total (reduce #'+ (coerce x 'list))))
-               (when (> total 1e-10)
-                 (dotimes (i (length x))
-                   (setf (aref x i) (/ (aref x i) total)))))
-             (push (cons t-current (copy-seq x)) trajectory))
-    
-    (nreverse trajectory)))
-```
-
-### 10.4 ネットワーク指標
-
-**接続密度（Connectance）：**
-
-$$
-C = \frac{L}{T(T-1)}
-$$
-
-ここで $L$ は有意な相互作用の数（$|A_{ij}| > \text{threshold}$）。
-
-**正・負の相互作用比：**
-
-$$
-R_{+/-} = \frac{\sum_{i \neq j} \mathbb{1}(A_{ij} > 0)}{\sum_{i \neq j} \mathbb{1}(A_{ij} < 0)}
-$$
-
-**平均相互作用強度：**
-
-$$
-\bar{|A|} = \frac{1}{L} \sum_{|A_{ij}| > \text{threshold}} |A_{ij}|
-$$
-
-### 10.5 変動率指標
-
-ドナー別の時間変動を定量化するため、連続する時点間のBray-Curtis距離の平均を使用。
-
-$$
-V_d = \frac{1}{T-1} \sum_{t=1}^{T-1} BC(\mathbf{p}_d(t), \mathbf{p}_d(t+1))
-$$
-
-ここで $d$ はドナー、$T$ は時点数。
-
----
-
-## 11. まとめ
-
-本解析パイプラインでは以下の統計手法を実装した：
-
-| 手法 | 目的 | 主要パラメータ |
-|------|------|----------------|
-| Bray-Curtis距離 | 組成的非類似度 | - |
-| PCoA | 次元削減・可視化 | 固有値分解 |
-| PERMANOVA | グループ間差の検定 | F統計量, permutation |
-| SIMPER | 差に寄与する分類群特定 | 寄与率 |
-| BETADISPER | 分散の均一性検定 | F統計量, permutation |
-| gLVモデル | ネットワークダイナミクス | A行列, r ベクトル |
-| Runge-Kutta法 | 微分方程式の数値解法 | dt = 0.5h |
-
-これらの手法により、重力条件が腸内細菌叢の組成、多様性、および種間相互作用ネットワークに与える影響を包括的に解析できる。
-
----
-
-## 参考文献
-
-1. Anderson, M. J. (2001). A new method for non-parametric multivariate analysis of variance. *Austral Ecology*, 26(1), 32-46.
-2. Clarke, K. R. (1993). Non-parametric multivariate analyses of changes in community structure. *Australian Journal of Ecology*, 18(1), 117-143.
-3. Stein, R. R., et al. (2013). Ecological modeling from time-series inference: insight into dynamics and stability of intestinal microbiota. *PLoS Computational Biology*, 9(12), e1003388.
-4. Gower, J. C. (1966). Some distance properties of latent root and vector methods used in multivariate analysis. *Biometrika*, 53(3-4), 325-338.
-5. Legendre, P., & Anderson, M. J. (1999). Distance-based redundancy analysis: testing multispecies responses in multifactorial ecological experiments. *Ecological Monographs*, 69(1), 1-24.
+今後の改善には、より高頻度のサンプリング、絶対定量の導入、ドナー別モデルの構築などが必要である。

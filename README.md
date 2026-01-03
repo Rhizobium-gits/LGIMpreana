@@ -1,4 +1,4 @@
-# Microbiome Analysis System
+# Microbiome Analysis
 
 重力環境下における腸内細菌叢の時系列変化を解析するCommon Lispコード
 

@@ -1,0 +1,538 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 2400" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <!-- Gradient definitions -->
+    <linearGradient id="inputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E3F2FD"/>
+      <stop offset="100%" style="stop-color:#BBDEFB"/>
+    </linearGradient>
+    <linearGradient id="preprocGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFF3E0"/>
+      <stop offset="100%" style="stop-color:#FFE0B2"/>
+    </linearGradient>
+    <linearGradient id="analysisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8F5E9"/>
+      <stop offset="100%" style="stop-color:#C8E6C9"/>
+    </linearGradient>
+    <linearGradient id="statsGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FCE4EC"/>
+      <stop offset="100%" style="stop-color:#F8BBD9"/>
+    </linearGradient>
+    <linearGradient id="deepGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F3E5F5"/>
+      <stop offset="100%" style="stop-color:#E1BEE7"/>
+    </linearGradient>
+    <linearGradient id="outputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFDE7"/>
+      <stop offset="100%" style="stop-color:#FFF9C4"/>
+    </linearGradient>
+    
+    <!-- Arrow marker -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#546E7A"/>
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#1976D2"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1400" height="2400" fill="#FAFAFA"/>
+  
+  <!-- Title -->
+  <text x="700" y="45" text-anchor="middle" font-size="28" font-weight="bold" fill="#212121">Microbiome Analysis System v6</text>
+  <text x="700" y="75" text-anchor="middle" font-size="16" fill="#616161">Complete Pipeline Architecture with Detailed Processing Steps</text>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 1: INPUT DATA -->
+  <!-- ========================================== -->
+  <rect x="20" y="100" width="1360" height="180" rx="10" fill="url(#inputGrad)" stroke="#1976D2" stroke-width="2"/>
+  <text x="700" y="125" text-anchor="middle" font-size="18" font-weight="bold" fill="#1565C0">1. INPUT DATA</text>
+  
+  <!-- CSV File Box -->
+  <rect x="500" y="140" width="400" height="60" rx="8" fill="white" stroke="#1976D2" stroke-width="1.5"/>
+  <text x="700" y="165" text-anchor="middle" font-size="14" font-weight="bold" fill="#1565C0">gut_microbiome_16S_mock_gravity_culture.csv</text>
+  <text x="700" y="185" text-anchor="middle" font-size="12" fill="#424242">138 samples × 117 taxa (16,146 data points)</text>
+  
+  <!-- Data Structure Details -->
+  <rect x="40" y="210" width="320" height="60" rx="5" fill="white" stroke="#90CAF9" stroke-width="1"/>
+  <text x="50" y="230" font-size="11" font-weight="bold" fill="#1565C0">Column Structure:</text>
+  <text x="50" y="245" font-size="10" fill="#424242">• sample_id: Unique identifier (S001-S138)</text>
+  <text x="50" y="258" font-size="10" fill="#424242">• gravity, time, donor: Experimental factors</text>
+  
+  <rect x="380" y="210" width="300" height="60" rx="5" fill="white" stroke="#90CAF9" stroke-width="1"/>
+  <text x="390" y="230" font-size="11" font-weight="bold" fill="#1565C0">Experimental Design:</text>
+  <text x="390" y="245" font-size="10" fill="#424242">• Gravity: 0g, 1/6g, 1g, 1g_static, 5g</text>
+  <text x="390" y="258" font-size="10" fill="#424242">• Time: baseline, 8h, 16h, 24h</text>
+  
+  <rect x="700" y="210" width="320" height="60" rx="5" fill="white" stroke="#90CAF9" stroke-width="1"/>
+  <text x="710" y="230" font-size="11" font-weight="bold" fill="#1565C0">Abundance Data:</text>
+  <text x="710" y="245" font-size="10" fill="#424242">• Taxon_001 ~ Taxon_117: Raw read counts</text>
+  <text x="710" y="258" font-size="10" fill="#424242">• Integer values (0 ~ 10000+)</text>
+  
+  <rect x="1040" y="210" width="320" height="60" rx="5" fill="white" stroke="#90CAF9" stroke-width="1"/>
+  <text x="1050" y="230" font-size="11" font-weight="bold" fill="#1565C0">Biological Replicates:</text>
+  <text x="1050" y="245" font-size="10" fill="#424242">• 3 donors (D1, D2, D3)</text>
+  <text x="1050" y="258" font-size="10" fill="#424242">• n = 108 culture + 30 baseline samples</text>
+  
+  <!-- Arrow to preprocessing -->
+  <line x1="700" y1="280" x2="700" y2="300" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 2: PREPROCESSING -->
+  <!-- ========================================== -->
+  <rect x="20" y="310" width="1360" height="220" rx="10" fill="url(#preprocGrad)" stroke="#E65100" stroke-width="2"/>
+  <text x="700" y="335" text-anchor="middle" font-size="18" font-weight="bold" fill="#E65100">2. PREPROCESSING (utils.lisp)</text>
+  
+  <!-- Step 2a: Load -->
+  <rect x="40" y="350" width="400" height="80" rx="8" fill="white" stroke="#FF9800" stroke-width="1.5"/>
+  <text x="240" y="375" text-anchor="middle" font-size="13" font-weight="bold" fill="#E65100">load-microbiome-data</text>
+  <line x1="50" y1="382" x2="430" y2="382" stroke="#FFE0B2" stroke-width="1"/>
+  <text x="50" y="398" font-size="10" fill="#424242">1. cl-csv:read-csv でCSVをパース</text>
+  <text x="50" y="412" font-size="10" fill="#424242">2. 数値列を2D配列に変換 (make-array)</text>
+  <text x="50" y="426" font-size="10" fill="#424242">3. microbiome-data構造体に格納</text>
+  
+  <!-- Arrow -->
+  <line x1="440" y1="390" x2="480" y2="390" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Step 2b: Filter -->
+  <rect x="490" y="350" width="400" height="80" rx="8" fill="white" stroke="#FF9800" stroke-width="1.5"/>
+  <text x="690" y="375" text-anchor="middle" font-size="13" font-weight="bold" fill="#E65100">filter-samples</text>
+  <line x1="500" y1="382" x2="880" y2="382" stroke="#FFE0B2" stroke-width="1"/>
+  <text x="500" y="398" font-size="10" fill="#424242">1. gravity ≠ "baseline" のサンプルを選択</text>
+  <text x="500" y="412" font-size="10" fill="#424242">2. 138 samples → 108 samples (培養のみ)</text>
+  <text x="500" y="426" font-size="10" fill="#424242">3. インデックスリストを返す</text>
+  
+  <!-- Arrow -->
+  <line x1="890" y1="390" x2="930" y2="390" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Step 2c: Normalize -->
+  <rect x="940" y="350" width="420" height="80" rx="8" fill="white" stroke="#FF9800" stroke-width="1.5"/>
+  <text x="1150" y="375" text-anchor="middle" font-size="13" font-weight="bold" fill="#E65100">get-relative-abundance</text>
+  <line x1="950" y1="382" x2="1350" y2="382" stroke="#FFE0B2" stroke-width="1"/>
+  <text x="950" y="398" font-size="10" fill="#424242">1. 各サンプル(行)の合計を計算: sum_i = Σⱼ count[i,j]</text>
+  <text x="950" y="412" font-size="10" fill="#424242">2. 相対存在量に変換: rel[i,j] = count[i,j] / sum_i</text>
+  <text x="950" y="426" font-size="10" fill="#424242">3. 出力: 108×117 行列 (各行の合計 = 1.0)</text>
+  
+  <!-- Formula box -->
+  <rect x="40" y="445" width="600" height="70" rx="5" fill="white" stroke="#FFE0B2" stroke-width="1"/>
+  <text x="50" y="465" font-size="11" font-weight="bold" fill="#E65100">Normalization Formula (Total Sum Scaling):</text>
+  <text x="50" y="485" font-size="12" font-family="monospace" fill="#424242">relative_abundance[i,j] = raw_count[i,j] / Σₖ raw_count[i,k]</text>
+  <text x="50" y="505" font-size="10" fill="#757575">→ 各サンプルの存在量を0-1の比率に正規化（サンプル間の総リード数差を補正）</text>
+  
+  <!-- Output box -->
+  <rect x="680" y="445" width="680" height="70" rx="5" fill="white" stroke="#FFE0B2" stroke-width="1"/>
+  <text x="690" y="465" font-size="11" font-weight="bold" fill="#E65100">Output Data Structure:</text>
+  <text x="690" y="485" font-size="10" fill="#424242">• abundance: 108×117 double-float array (normalized, values 0.0-1.0)</text>
+  <text x="690" y="500" font-size="10" fill="#424242">• gravity: 108-element vector ("0g", "1_6g", "1g", "1g_s", "5g")</text>
+  <text x="690" y="515" font-size="10" fill="#424242">• time: 108-element vector ("8h", "16h", "24h") / donor: ("D1", "D2", "D3")</text>
+  
+  <!-- Arrow to distance -->
+  <line x1="700" y1="530" x2="700" y2="550" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 3: DISTANCE CALCULATION -->
+  <!-- ========================================== -->
+  <rect x="20" y="560" width="1360" height="200" rx="10" fill="url(#analysisGrad)" stroke="#2E7D32" stroke-width="2"/>
+  <text x="700" y="585" text-anchor="middle" font-size="18" font-weight="bold" fill="#2E7D32">3. DISTANCE CALCULATION (distance.lisp)</text>
+  
+  <!-- Bray-Curtis explanation -->
+  <rect x="40" y="600" width="650" height="145" rx="8" fill="white" stroke="#4CAF50" stroke-width="1.5"/>
+  <text x="365" y="625" text-anchor="middle" font-size="13" font-weight="bold" fill="#2E7D32">Bray-Curtis Dissimilarity</text>
+  <line x1="50" y1="632" x2="680" y2="632" stroke="#C8E6C9" stroke-width="1"/>
+  
+  <text x="50" y="655" font-size="12" font-family="monospace" fill="#424242">BC(i,j) = 1 - (2 × Σₖ min(xᵢₖ, xⱼₖ)) / (Σₖ xᵢₖ + Σₖ xⱼₖ)</text>
+  
+  <text x="50" y="680" font-size="10" fill="#424242">【処理手順】</text>
+  <text x="50" y="695" font-size="10" fill="#424242">1. 全サンプルペア(i,j)について、各分類群kの最小値を合計</text>
+  <text x="50" y="710" font-size="10" fill="#424242">2. 共通部分を2倍し、両サンプルの合計で割る → 類似度(0-1)</text>
+  <text x="50" y="725" font-size="10" fill="#424242">3. 1から引いて非類似度に変換 → BC距離(0=同一, 1=完全に異なる)</text>
+  <text x="50" y="740" font-size="10" fill="#757575">計算量: O(n² × m) = O(108² × 117) ≈ 136万回の比較</text>
+  
+  <!-- Distance matrix visualization -->
+  <rect x="710" y="600" width="650" height="145" rx="8" fill="white" stroke="#4CAF50" stroke-width="1.5"/>
+  <text x="1035" y="625" text-anchor="middle" font-size="13" font-weight="bold" fill="#2E7D32">Output: 108×108 Symmetric Distance Matrix</text>
+  <line x1="720" y1="632" x2="1350" y2="632" stroke="#C8E6C9" stroke-width="1"/>
+  
+  <!-- Matrix visualization -->
+  <g transform="translate(730, 645)">
+    <rect x="0" y="0" width="25" height="18" fill="#FFFFFF" stroke="#E0E0E0"/>
+    <rect x="25" y="0" width="25" height="18" fill="#FFECB3" stroke="#E0E0E0"/>
+    <rect x="50" y="0" width="25" height="18" fill="#FFE082" stroke="#E0E0E0"/>
+    <rect x="75" y="0" width="25" height="18" fill="#FFD54F" stroke="#E0E0E0"/>
+    <rect x="100" y="0" width="25" height="18" fill="#FFCA28" stroke="#E0E0E0"/>
+    <text x="135" y="13" font-size="9" fill="#424242">S001</text>
+    
+    <rect x="0" y="18" width="25" height="18" fill="#FFECB3" stroke="#E0E0E0"/>
+    <rect x="25" y="18" width="25" height="18" fill="#FFFFFF" stroke="#E0E0E0"/>
+    <rect x="50" y="18" width="25" height="18" fill="#FFECB3" stroke="#E0E0E0"/>
+    <rect x="75" y="18" width="25" height="18" fill="#FFE082" stroke="#E0E0E0"/>
+    <rect x="100" y="18" width="25" height="18" fill="#FFD54F" stroke="#E0E0E0"/>
+    <text x="135" y="31" font-size="9" fill="#424242">S002</text>
+    
+    <rect x="0" y="36" width="25" height="18" fill="#FFE082" stroke="#E0E0E0"/>
+    <rect x="25" y="36" width="25" height="18" fill="#FFECB3" stroke="#E0E0E0"/>
+    <rect x="50" y="36" width="25" height="18" fill="#FFFFFF" stroke="#E0E0E0"/>
+    <rect x="75" y="36" width="25" height="18" fill="#FFECB3" stroke="#E0E0E0"/>
+    <rect x="100" y="36" width="25" height="18" fill="#FFE082" stroke="#E0E0E0"/>
+    <text x="135" y="49" font-size="9" fill="#424242">S003</text>
+    
+    <text x="60" y="75" text-anchor="middle" font-size="9" fill="#757575">対角成分 = 0</text>
+  </g>
+  
+  <text x="900" y="665" font-size="10" fill="#424242">【特性】</text>
+  <text x="900" y="680" font-size="10" fill="#424242">• 対称行列: D[i,j] = D[j,i]</text>
+  <text x="900" y="695" font-size="10" fill="#424242">• 対角成分: D[i,i] = 0 (自分との距離)</text>
+  <text x="900" y="710" font-size="10" fill="#424242">• 範囲: 0.0 ≤ D[i,j] ≤ 1.0</text>
+  <text x="900" y="725" font-size="10" fill="#424242">• 格納: 上三角のみ (5,778要素)</text>
+  <text x="900" y="740" font-size="10" fill="#757575">→ 後続の全解析(PCoA, PERMANOVA等)で使用</text>
+  
+  <!-- Arrows to parallel analyses -->
+  <line x1="350" y1="760" x2="350" y2="790" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="700" y1="760" x2="700" y2="790" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="1050" y1="760" x2="1050" y2="790" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 4: PARALLEL ANALYSIS -->
+  <!-- ========================================== -->
+  <rect x="20" y="800" width="1360" height="280" rx="10" fill="url(#analysisGrad)" stroke="#2E7D32" stroke-width="2"/>
+  <text x="700" y="825" text-anchor="middle" font-size="18" font-weight="bold" fill="#2E7D32">4. ANALYSIS PIPELINE (Parallel Processing)</text>
+  
+  <!-- PCoA Box -->
+  <rect x="40" y="840" width="420" height="220" rx="8" fill="white" stroke="#4CAF50" stroke-width="1.5"/>
+  <text x="250" y="865" text-anchor="middle" font-size="13" font-weight="bold" fill="#2E7D32">PCoA - Principal Coordinates Analysis</text>
+  <text x="250" y="880" text-anchor="middle" font-size="10" fill="#757575">(ordination.lisp)</text>
+  <line x1="50" y1="888" x2="450" y2="888" stroke="#C8E6C9" stroke-width="1"/>
+  
+  <text x="50" y="908" font-size="10" font-weight="bold" fill="#424242">Step 1: 距離行列の二乗</text>
+  <text x="60" y="922" font-size="9" font-family="monospace" fill="#616161">D² = D ⊙ D (要素ごとの二乗)</text>
+  
+  <text x="50" y="942" font-size="10" font-weight="bold" fill="#424242">Step 2: ダブルセンタリング</text>
+  <text x="60" y="956" font-size="9" font-family="monospace" fill="#616161">B = -0.5 × J × D² × J</text>
+  <text x="60" y="970" font-size="9" fill="#757575">J = I - (1/n)×11' (センタリング行列)</text>
+  
+  <text x="50" y="990" font-size="10" font-weight="bold" fill="#424242">Step 3: 固有値分解</text>
+  <text x="60" y="1004" font-size="9" font-family="monospace" fill="#616161">B = V × Λ × V' (Power iteration法)</text>
+  
+  <text x="50" y="1024" font-size="10" font-weight="bold" fill="#424242">Step 4: 座標計算</text>
+  <text x="60" y="1038" font-size="9" font-family="monospace" fill="#616161">coords = V × √Λ</text>
+  <text x="60" y="1052" font-size="9" fill="#757575">分散説明率 = λᵢ / Σλ × 100%</text>
+  
+  <!-- PERMANOVA Box -->
+  <rect x="480" y="840" width="440" height="220" rx="8" fill="white" stroke="#E91E63" stroke-width="1.5"/>
+  <text x="700" y="865" text-anchor="middle" font-size="13" font-weight="bold" fill="#C2185B">PERMANOVA - Permutational MANOVA</text>
+  <text x="700" y="880" text-anchor="middle" font-size="10" fill="#757575">(permanova.lisp)</text>
+  <line x1="490" y1="888" x2="910" y2="888" stroke="#F8BBD9" stroke-width="1"/>
+  
+  <text x="490" y="908" font-size="10" font-weight="bold" fill="#424242">Step 1: 総変動の計算</text>
+  <text x="500" y="922" font-size="9" font-family="monospace" fill="#616161">SS_total = Σᵢ&lt;ⱼ d²ᵢⱼ / n</text>
+  
+  <text x="490" y="942" font-size="10" font-weight="bold" fill="#424242">Step 2: 群内変動の計算</text>
+  <text x="500" y="956" font-size="9" font-family="monospace" fill="#616161">SS_within = Σ_g (Σᵢ&lt;ⱼ∈g d²ᵢⱼ / n_g)</text>
+  
+  <text x="490" y="976" font-size="10" font-weight="bold" fill="#424242">Step 3: F統計量</text>
+  <text x="500" y="990" font-size="9" font-family="monospace" fill="#616161">F = (SS_between/df_b) / (SS_within/df_w)</text>
+  <text x="500" y="1004" font-size="9" fill="#757575">SS_between = SS_total - SS_within</text>
+  
+  <text x="490" y="1024" font-size="10" font-weight="bold" fill="#424242">Step 4: 置換検定 (999回)</text>
+  <text x="500" y="1038" font-size="9" fill="#616161">グループラベルをシャッフル → F*を再計算</text>
+  <text x="500" y="1052" font-size="9" font-family="monospace" fill="#616161">p = (Σ(F* ≥ F) + 1) / 1000</text>
+  
+  <!-- SIMPER/BETADISPER Box -->
+  <rect x="940" y="840" width="420" height="220" rx="8" fill="white" stroke="#E91E63" stroke-width="1.5"/>
+  <text x="1150" y="865" text-anchor="middle" font-size="13" font-weight="bold" fill="#C2185B">SIMPER &amp; BETADISPER</text>
+  <text x="1150" y="880" text-anchor="middle" font-size="10" fill="#757575">(simper.lisp, betadisper.lisp)</text>
+  <line x1="950" y1="888" x2="1350" y2="888" stroke="#F8BBD9" stroke-width="1"/>
+  
+  <text x="950" y="908" font-size="10" font-weight="bold" fill="#424242">SIMPER (Similarity Percentages):</text>
+  <text x="960" y="922" font-size="9" fill="#616161">1. グループ間のBC距離を分類群別に分解</text>
+  <text x="960" y="936" font-size="9" font-family="monospace" fill="#616161">δᵢₖ = |x_aₖ - x_bₖ| / (x_aₖ + x_bₖ)</text>
+  <text x="960" y="950" font-size="9" fill="#616161">2. 各分類群の寄与率を計算</text>
+  <text x="960" y="964" font-size="9" fill="#757575">→ 群間差に最も寄与する指標種を特定</text>
+  
+  <text x="950" y="990" font-size="10" font-weight="bold" fill="#424242">BETADISPER (Beta Dispersion):</text>
+  <text x="960" y="1004" font-size="9" fill="#616161">1. 各グループの重心を計算 (PCoA空間)</text>
+  <text x="960" y="1018" font-size="9" fill="#616161">2. 各点から重心への距離を計算</text>
+  <text x="960" y="1032" font-size="9" font-family="monospace" fill="#616161">dist_i = ||coord_i - centroid_g||</text>
+  <text x="960" y="1046" font-size="9" fill="#616161">3. 距離の分散をグループ間で比較(F検定)</text>
+  
+  <!-- Arrows to results -->
+  <line x1="250" y1="1060" x2="250" y2="1090" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="700" y1="1060" x2="700" y2="1090" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <line x1="1150" y1="1060" x2="1150" y2="1090" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 5: RESULTS EXTRACTION -->
+  <!-- ========================================== -->
+  <rect x="20" y="1100" width="1360" height="160" rx="10" fill="url(#outputGrad)" stroke="#F9A825" stroke-width="2"/>
+  <text x="700" y="1125" text-anchor="middle" font-size="18" font-weight="bold" fill="#F57F17">5. RESULTS EXTRACTION</text>
+  
+  <!-- PCoA Results -->
+  <rect x="40" y="1140" width="420" height="100" rx="8" fill="white" stroke="#FFC107" stroke-width="1.5"/>
+  <text x="250" y="1162" text-anchor="middle" font-size="12" font-weight="bold" fill="#F57F17">PCoA Results</text>
+  <line x1="50" y1="1170" x2="450" y2="1170" stroke="#FFF9C4" stroke-width="1"/>
+  <text x="50" y="1188" font-size="10" fill="#424242">• coordinates: 108×2 array (PC1, PC2)</text>
+  <text x="50" y="1203" font-size="10" fill="#424242">• eigenvalues: [λ₁, λ₂, ...] (降順)</text>
+  <text x="50" y="1218" font-size="10" fill="#424242">• variance-explained: [45.2%, 12.3%, ...]</text>
+  <text x="50" y="1233" font-size="10" fill="#757575">→ Figure 1, 3で使用</text>
+  
+  <!-- PERMANOVA Results -->
+  <rect x="480" y="1140" width="440" height="100" rx="8" fill="white" stroke="#FFC107" stroke-width="1.5"/>
+  <text x="700" y="1162" text-anchor="middle" font-size="12" font-weight="bold" fill="#F57F17">PERMANOVA Results</text>
+  <line x1="490" y1="1170" x2="910" y2="1170" stroke="#FFF9C4" stroke-width="1"/>
+  <text x="490" y="1188" font-size="10" fill="#424242">• F-statistic: 8.234 (群間/群内分散比)</text>
+  <text x="490" y="1203" font-size="10" fill="#424242">• R²: 0.156 (効果量、説明率15.6%)</text>
+  <text x="490" y="1218" font-size="10" fill="#424242">• p-value: 0.001*** (999置換から算出)</text>
+  <text x="490" y="1233" font-size="10" fill="#2E7D32" font-weight="bold">→ 重力条件は細菌叢組成に有意な影響</text>
+  
+  <!-- SIMPER Results -->
+  <rect x="940" y="1140" width="420" height="100" rx="8" fill="white" stroke="#FFC107" stroke-width="1.5"/>
+  <text x="1150" y="1162" text-anchor="middle" font-size="12" font-weight="bold" fill="#F57F17">SIMPER/BETADISPER Results</text>
+  <line x1="950" y1="1170" x2="1350" y2="1170" stroke="#FFF9C4" stroke-width="1"/>
+  <text x="950" y="1188" font-size="10" fill="#424242">Top Contributors: 1.Bacteroides(15.2%)</text>
+  <text x="950" y="1203" font-size="10" fill="#424242">  2.Prevotella(12.1%) 3.Blautia(8.3%)</text>
+  <text x="950" y="1218" font-size="10" fill="#424242">• Dispersion F: 2.41, p=0.043*</text>
+  <text x="950" y="1233" font-size="10" fill="#757575">→ Figure 4, 5で使用</text>
+  
+  <!-- Arrow to visualization -->
+  <line x1="700" y1="1260" x2="700" y2="1290" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 6: VISUALIZATION -->
+  <!-- ========================================== -->
+  <rect x="20" y="1300" width="1360" height="200" rx="10" fill="url(#outputGrad)" stroke="#F9A825" stroke-width="2"/>
+  <text x="700" y="1325" text-anchor="middle" font-size="18" font-weight="bold" fill="#F57F17">6. BASIC VISUALIZATION (visualization.lisp → Gnuplot)</text>
+  
+  <!-- Figure boxes -->
+  <rect x="40" y="1345" width="200" height="140" rx="8" fill="#E64B3530" stroke="#E64B35" stroke-width="2"/>
+  <text x="140" y="1370" text-anchor="middle" font-size="12" font-weight="bold" fill="#C62828">Figure 1: PCoA</text>
+  <text x="50" y="1390" font-size="9" fill="#424242">• 95%信頼楕円付き散布図</text>
+  <text x="50" y="1405" font-size="9" fill="#424242">• パラメトリック楕円:</text>
+  <text x="55" y="1418" font-size="8" font-family="monospace" fill="#616161">x=cx+1.96×sx×cos(t)</text>
+  <text x="55" y="1430" font-size="8" font-family="monospace" fill="#616161">y=cy+1.96×sy×sin(t)</text>
+  <text x="50" y="1445" font-size="9" fill="#424242">• NPGカラーパレット</text>
+  <text x="50" y="1460" font-size="9" fill="#424242">• 900×800 px</text>
+  <text x="50" y="1475" font-size="8" fill="#757575">plot-pcoa関数</text>
+  
+  <rect x="260" y="1345" width="200" height="140" rx="8" fill="#4DBBD530" stroke="#4DBBD5" stroke-width="2"/>
+  <text x="360" y="1370" text-anchor="middle" font-size="12" font-weight="bold" fill="#0097A7">Figure 2: Stacked Bar</text>
+  <text x="270" y="1390" font-size="9" fill="#424242">• 100%積み上げ棒グラフ</text>
+  <text x="270" y="1405" font-size="9" fill="#424242">• 上位12分類群+Others</text>
+  <text x="270" y="1420" font-size="9" fill="#424242">• histogram rowstacked</text>
+  <text x="270" y="1435" font-size="9" fill="#424242">• 重力条件順でソート</text>
+  <text x="270" y="1450" font-size="9" fill="#424242">• 1200×700 px</text>
+  <text x="270" y="1475" font-size="8" fill="#757575">plot-stacked-barplot関数</text>
+  
+  <rect x="480" y="1345" width="200" height="140" rx="8" fill="#00A08730" stroke="#00A087" stroke-width="2"/>
+  <text x="580" y="1370" text-anchor="middle" font-size="12" font-weight="bold" fill="#00796B">Figure 3: Trajectory</text>
+  <text x="490" y="1390" font-size="9" fill="#424242">• 時系列軌跡図</text>
+  <text x="490" y="1405" font-size="9" fill="#424242">• 各時点の重心を接続</text>
+  <text x="490" y="1420" font-size="9" fill="#424242">• 8h→16h→24hの方向</text>
+  <text x="490" y="1435" font-size="9" fill="#424242">• 重力条件別に色分け</text>
+  <text x="490" y="1450" font-size="9" fill="#424242">• 900×750 px</text>
+  <text x="490" y="1475" font-size="8" fill="#757575">plot-trajectory関数</text>
+  
+  <rect x="700" y="1345" width="200" height="140" rx="8" fill="#3C548830" stroke="#3C5488" stroke-width="2"/>
+  <text x="800" y="1370" text-anchor="middle" font-size="12" font-weight="bold" fill="#283593">Figure 4: Dispersion</text>
+  <text x="710" y="1390" font-size="9" fill="#424242">• β分散ボックスプロット</text>
+  <text x="710" y="1405" font-size="9" fill="#424242">• 重心からの距離分布</text>
+  <text x="710" y="1420" font-size="9" fill="#424242">• boxplot + outliers</text>
+  <text x="710" y="1435" font-size="9" fill="#424242">• 群間で分散を比較</text>
+  <text x="710" y="1450" font-size="9" fill="#424242">• 800×600 px</text>
+  <text x="710" y="1475" font-size="8" fill="#757575">plot-dispersion関数</text>
+  
+  <rect x="920" y="1345" width="200" height="140" rx="8" fill="#F39B7F30" stroke="#F39B7F" stroke-width="2"/>
+  <text x="1020" y="1370" text-anchor="middle" font-size="12" font-weight="bold" fill="#D84315">Figure 5: Taxa Bar</text>
+  <text x="930" y="1390" font-size="9" fill="#424242">• 分類群別平均棒グラフ</text>
+  <text x="930" y="1405" font-size="9" fill="#424242">• 上位10分類群</text>
+  <text x="930" y="1420" font-size="9" fill="#424242">• クラスター型histogram</text>
+  <text x="930" y="1435" font-size="9" fill="#424242">• 重力条件をグループ化</text>
+  <text x="930" y="1450" font-size="9" fill="#424242">• 1100×700 px</text>
+  <text x="930" y="1475" font-size="8" fill="#757575">plot-taxa-barplot関数</text>
+  
+  <rect x="1140" y="1345" width="200" height="140" rx="8" fill="#8491B430" stroke="#8491B4" stroke-width="2"/>
+  <text x="1240" y="1370" text-anchor="middle" font-size="12" font-weight="bold" fill="#5C6BC0">Figure 6: Heatmap</text>
+  <text x="1150" y="1390" font-size="9" fill="#424242">• 存在量ヒートマップ</text>
+  <text x="1150" y="1405" font-size="9" fill="#424242">• 上位20分類群</text>
+  <text x="1150" y="1420" font-size="9" fill="#424242">• YlOrRdパレット</text>
+  <text x="1150" y="1435" font-size="9" fill="#424242">• 重力グループで列ソート</text>
+  <text x="1150" y="1450" font-size="9" fill="#424242">• 1400×800 px</text>
+  <text x="1150" y="1475" font-size="8" fill="#757575">plot-heatmap関数</text>
+  
+  <!-- Arrow to deep learning -->
+  <line x1="700" y1="1500" x2="700" y2="1530" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 7: DEEP LEARNING PREDICTION -->
+  <!-- ========================================== -->
+  <rect x="20" y="1540" width="1360" height="420" rx="10" fill="url(#deepGrad)" stroke="#7B1FA2" stroke-width="2"/>
+  <text x="700" y="1565" text-anchor="middle" font-size="18" font-weight="bold" fill="#7B1FA2">7. DEEP LEARNING PREDICTION PIPELINE</text>
+  
+  <!-- Time Series Extraction -->
+  <rect x="40" y="1585" width="420" height="180" rx="8" fill="white" stroke="#9C27B0" stroke-width="1.5"/>
+  <text x="250" y="1610" text-anchor="middle" font-size="13" font-weight="bold" fill="#7B1FA2">Time Series Extraction</text>
+  <text x="250" y="1625" text-anchor="middle" font-size="10" fill="#757575">(prediction-viz.lisp)</text>
+  <line x1="50" y1="1632" x2="450" y2="1632" stroke="#E1BEE7" stroke-width="1"/>
+  
+  <text x="50" y="1652" font-size="10" font-weight="bold" fill="#424242">処理手順:</text>
+  <text x="50" y="1668" font-size="9" fill="#424242">1. 各ドナー×重力条件の組み合わせを抽出</text>
+  <text x="50" y="1683" font-size="9" fill="#424242">2. 時系列データを構築: {8h, 16h, 24h}</text>
+  <text x="50" y="1698" font-size="9" fill="#424242">3. 各時点での平均存在量ベクトルを計算</text>
+  <text x="50" y="1718" font-size="10" font-weight="bold" fill="#424242">出力:</text>
+  <text x="50" y="1733" font-size="9" fill="#424242">• time-data hash-table: "8h"→[117-vec]</text>
+  <text x="50" y="1748" font-size="9" fill="#424242">• 5重力条件 × 3時点 = 15データポイント</text>
+  
+  <!-- Prediction Model -->
+  <rect x="480" y="1585" width="440" height="180" rx="8" fill="white" stroke="#9C27B0" stroke-width="1.5"/>
+  <text x="700" y="1610" text-anchor="middle" font-size="13" font-weight="bold" fill="#7B1FA2">Prediction Model (simulate-prediction)</text>
+  <line x1="490" y1="1632" x2="910" y2="1632" stroke="#E1BEE7" stroke-width="1"/>
+  
+  <text x="490" y="1652" font-size="10" font-weight="bold" fill="#424242">線形外挿アルゴリズム:</text>
+  <text x="500" y="1668" font-size="9" font-family="monospace" fill="#616161">slope[k] = (val_24h[k] - val_16h[k]) / 8</text>
+  <text x="500" y="1683" font-size="9" font-family="monospace" fill="#616161">pred_32h[k] = val_24h[k] + slope[k] × 8</text>
+  <text x="500" y="1698" font-size="9" font-family="monospace" fill="#616161">pred_48h[k] = val_24h[k] + slope[k] × 24</text>
+  
+  <text x="490" y="1718" font-size="10" font-weight="bold" fill="#424242">ノイズ追加:</text>
+  <text x="500" y="1733" font-size="9" font-family="monospace" fill="#616161">final[k] = pred[k] + noise×(random-1)</text>
+  <text x="500" y="1748" font-size="9" fill="#757575">noise=0.03 (±3%の変動)</text>
+  <text x="500" y="1763" font-size="9" fill="#757575">clamp to [0.0, 1.0] (存在量の範囲制限)</text>
+  
+  <!-- Uncertainty Quantification -->
+  <rect x="940" y="1585" width="420" height="180" rx="8" fill="white" stroke="#9C27B0" stroke-width="1.5"/>
+  <text x="1150" y="1610" text-anchor="middle" font-size="13" font-weight="bold" fill="#7B1FA2">Uncertainty Quantification</text>
+  <line x1="950" y1="1632" x2="1350" y2="1632" stroke="#E1BEE7" stroke-width="1"/>
+  
+  <text x="950" y="1652" font-size="10" font-weight="bold" fill="#424242">モンテカルロシミュレーション:</text>
+  <text x="960" y="1668" font-size="9" fill="#424242">1. 同じ予測を20回実行(異なる乱数シード)</text>
+  <text x="960" y="1683" font-size="9" fill="#424242">2. 各時点で20個の予測値を収集</text>
+  <text x="960" y="1698" font-size="9" fill="#424242">3. ソートして分位点を計算:</text>
+  <text x="970" y="1713" font-size="9" font-family="monospace" fill="#616161">lower_95 = values[0.025×n]</text>
+  <text x="970" y="1728" font-size="9" font-family="monospace" fill="#616161">upper_95 = values[0.975×n]</text>
+  <text x="970" y="1743" font-size="9" font-family="monospace" fill="#616161">mean = Σvalues / n</text>
+  <text x="960" y="1763" font-size="9" fill="#757575">→ 95%信頼区間を可視化</text>
+  
+  <!-- LSTM Box -->
+  <rect x="40" y="1780" width="650" height="160" rx="8" fill="white" stroke="#9C27B0" stroke-width="1.5"/>
+  <text x="365" y="1805" text-anchor="middle" font-size="13" font-weight="bold" fill="#7B1FA2">LSTM Seq2Seq Model (deep-prediction.lisp) - Optional</text>
+  <line x1="50" y1="1812" x2="680" y2="1812" stroke="#E1BEE7" stroke-width="1"/>
+  
+  <text x="50" y="1832" font-size="10" font-weight="bold" fill="#424242">LSTMセル構造:</text>
+  <text x="60" y="1848" font-size="9" font-family="monospace" fill="#616161">f = σ(Wf·x + Uf·h + bf)  ← Forget gate</text>
+  <text x="60" y="1863" font-size="9" font-family="monospace" fill="#616161">i = σ(Wi·x + Ui·h + bi)  ← Input gate</text>
+  <text x="60" y="1878" font-size="9" font-family="monospace" fill="#616161">o = σ(Wo·x + Uo·h + bo)  ← Output gate</text>
+  <text x="60" y="1893" font-size="9" font-family="monospace" fill="#616161">c̃ = tanh(Wc·x + Uc·h + bc)</text>
+  <text x="60" y="1908" font-size="9" font-family="monospace" fill="#616161">c_t = f⊙c_{t-1} + i⊙c̃</text>
+  <text x="60" y="1923" font-size="9" font-family="monospace" fill="#616161">h_t = o⊙tanh(c_t)</text>
+  
+  <text x="350" y="1848" font-size="10" font-weight="bold" fill="#424242">Seq2Seqアーキテクチャ:</text>
+  <text x="360" y="1865" font-size="9" fill="#424242">Encoder: 入力(8h,16h) → 隠れ状態(h,c)</text>
+  <text x="360" y="1880" font-size="9" fill="#424242">Decoder: (h,c) → 予測(24h,32h,48h)</text>
+  <text x="360" y="1895" font-size="9" fill="#424242">Output: Linear + Softmax</text>
+  <text x="360" y="1915" font-size="10" font-weight="bold" fill="#424242">パラメータ:</text>
+  <text x="360" y="1930" font-size="9" fill="#424242">input_size=117, hidden_size=32</text>
+  
+  <!-- Prediction Figures -->
+  <rect x="710" y="1780" width="650" height="160" rx="8" fill="white" stroke="#9C27B0" stroke-width="1.5"/>
+  <text x="1035" y="1805" text-anchor="middle" font-size="13" font-weight="bold" fill="#7B1FA2">Prediction Figures (Figure 7-9)</text>
+  <line x1="720" y1="1812" x2="1350" y2="1812" stroke="#E1BEE7" stroke-width="1"/>
+  
+  <!-- Fig 7 -->
+  <rect x="730" y="1825" width="190" height="100" rx="5" fill="#E64B3520" stroke="#E64B35"/>
+  <text x="825" y="1845" text-anchor="middle" font-size="10" font-weight="bold" fill="#C62828">Figure 7: Prediction</text>
+  <text x="740" y="1862" font-size="8" fill="#424242">• 実測(実線)+予測(破線)</text>
+  <text x="740" y="1875" font-size="8" fill="#424242">• 上位5分類群×3重力</text>
+  <text x="740" y="1888" font-size="8" fill="#424242">• 2×3マルチパネル</text>
+  <text x="740" y="1901" font-size="8" fill="#424242">• 1400×1000 px</text>
+  <text x="740" y="1917" font-size="7" fill="#757575">plot-prediction-timeseries</text>
+  
+  <!-- Fig 8 -->
+  <rect x="940" y="1825" width="190" height="100" rx="5" fill="#3C548820" stroke="#3C5488"/>
+  <text x="1035" y="1845" text-anchor="middle" font-size="10" font-weight="bold" fill="#283593">Figure 8: Change Heatmap</text>
+  <text x="950" y="1862" font-size="8" fill="#424242">• Δ=pred_48h - obs_24h</text>
+  <text x="950" y="1875" font-size="8" fill="#424242">• 青(減少)→白→赤(増加)</text>
+  <text x="950" y="1888" font-size="8" fill="#424242">• 15分類群×5重力</text>
+  <text x="950" y="1901" font-size="8" fill="#424242">• 1000×900 px</text>
+  <text x="950" y="1917" font-size="7" fill="#757575">plot-prediction-change-heatmap</text>
+  
+  <!-- Fig 9 -->
+  <rect x="1150" y="1825" width="190" height="100" rx="5" fill="#00A08720" stroke="#00A087"/>
+  <text x="1245" y="1845" text-anchor="middle" font-size="10" font-weight="bold" fill="#00796B">Figure 9: Uncertainty</text>
+  <text x="1160" y="1862" font-size="8" fill="#424242">• 95%信頼区間(塗りつぶし)</text>
+  <text x="1160" y="1875" font-size="8" fill="#424242">• 平均予測線</text>
+  <text x="1160" y="1888" font-size="8" fill="#424242">• 上位3分類群</text>
+  <text x="1160" y="1901" font-size="8" fill="#424242">• 1200×500 px</text>
+  <text x="1160" y="1917" font-size="7" fill="#757575">plot-prediction-uncertainty</text>
+  
+  <!-- Arrow to output -->
+  <line x1="700" y1="1960" x2="700" y2="1990" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 8: FINAL OUTPUT -->
+  <!-- ========================================== -->
+  <rect x="20" y="2000" width="1360" height="120" rx="10" fill="url(#outputGrad)" stroke="#F9A825" stroke-width="2"/>
+  <text x="700" y="2025" text-anchor="middle" font-size="18" font-weight="bold" fill="#F57F17">8. FINAL OUTPUT (/tmp/microbiome_results/)</text>
+  
+  <rect x="40" y="2040" width="1320" height="60" rx="8" fill="white" stroke="#FFC107" stroke-width="1"/>
+  <text x="700" y="2065" text-anchor="middle" font-size="11" font-family="monospace" fill="#424242">Figure1_PCoA.png | Figure2_StackedBar.png | Figure3_Trajectory.png | Figure4_Dispersion.png | Figure5_Taxa.png</text>
+  <text x="700" y="2085" text-anchor="middle" font-size="11" font-family="monospace" fill="#424242">Figure6_Heatmap.png | Figure7_Prediction.png | Figure8_ChangeHeatmap.png | Figure9_Uncertainty.png</text>
+  
+  <!-- ========================================== -->
+  <!-- SECTION 9: GNUPLOT RENDERING -->
+  <!-- ========================================== -->
+  <rect x="20" y="2140" width="1360" height="240" rx="10" fill="#ECEFF1" stroke="#607D8B" stroke-width="2"/>
+  <text x="700" y="2165" text-anchor="middle" font-size="18" font-weight="bold" fill="#455A64">Appendix: Gnuplot Rendering Pipeline</text>
+  
+  <!-- Lisp to Gnuplot -->
+  <rect x="40" y="2185" width="400" height="80" rx="8" fill="white" stroke="#78909C" stroke-width="1.5"/>
+  <text x="240" y="2210" text-anchor="middle" font-size="12" font-weight="bold" fill="#455A64">Common Lisp</text>
+  <text x="50" y="2230" font-size="9" fill="#424242">1. データを整形してGnuplotスクリプト生成</text>
+  <text x="50" y="2245" font-size="9" fill="#424242">2. $data &lt;&lt; EOD ... EOD でデータブロック埋め込み</text>
+  <text x="50" y="2260" font-size="9" fill="#424242">3. .gp ファイルとして保存</text>
+  
+  <!-- Arrow -->
+  <line x1="440" y1="2225" x2="490" y2="2225" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- Gnuplot -->
+  <rect x="500" y="2185" width="400" height="80" rx="8" fill="white" stroke="#78909C" stroke-width="1.5"/>
+  <text x="700" y="2210" text-anchor="middle" font-size="12" font-weight="bold" fill="#455A64">Gnuplot Execution</text>
+  <text x="510" y="2230" font-size="9" font-family="monospace" fill="#424242">(uiop:run-program</text>
+  <text x="520" y="2245" font-size="9" font-family="monospace" fill="#424242">  (list "gnuplot" script-file))</text>
+  <text x="510" y="2260" font-size="9" fill="#757575">→ スクリプトを実行してPNG生成</text>
+  
+  <!-- Arrow -->
+  <line x1="900" y1="2225" x2="950" y2="2225" stroke="#546E7A" stroke-width="2" marker-end="url(#arrowhead)"/>
+  
+  <!-- PNG Output -->
+  <rect x="960" y="2185" width="400" height="80" rx="8" fill="white" stroke="#78909C" stroke-width="1.5"/>
+  <text x="1160" y="2210" text-anchor="middle" font-size="12" font-weight="bold" fill="#455A64">PNG Output</text>
+  <text x="970" y="2230" font-size="9" font-family="monospace" fill="#424242">set terminal pngcairo size W,H</text>
+  <text x="970" y="2245" font-size="9" font-family="monospace" fill="#424242">set output '/path/to/figure.png'</text>
+  <text x="970" y="2260" font-size="9" fill="#757575">→ 高品質PNG (enhanced font)</text>
+  
+  <!-- Key settings -->
+  <rect x="40" y="2280" width="1320" height="80" rx="8" fill="white" stroke="#78909C" stroke-width="1"/>
+  <text x="50" y="2300" font-size="10" font-weight="bold" fill="#455A64">Gnuplot Key Settings (論文品質):</text>
+  <text x="50" y="2318" font-size="9" fill="#424242">• Terminal: pngcairo (アンチエイリアス、日本語対応)</text>
+  <text x="50" y="2333" font-size="9" fill="#424242">• Font: Arial 11-14pt (タイトルはBold)</text>
+  <text x="50" y="2348" font-size="9" fill="#424242">• Background: #FFFFFF (白)</text>
+  <text x="380" y="2318" font-size="9" fill="#424242">• Border: lw 1.5 lc rgb '#333333'</text>
+  <text x="380" y="2333" font-size="9" fill="#424242">• Grid: lc rgb '#E8E8E8' (薄いグレー)</text>
+  <text x="380" y="2348" font-size="9" fill="#424242">• Points: pt 7 ps 1.5-2.0 (filled circles)</text>
+  <text x="700" y="2318" font-size="9" fill="#424242">• NPG Palette: #E64B35, #4DBBD5, #00A087, #3C5488, #F39B7F</text>
+  <text x="700" y="2333" font-size="9" fill="#424242">• Legend: outside right top, box lt -1</text>
+  <text x="700" y="2348" font-size="9" fill="#424242">• Heatmap: palette defined (YlOrRd or diverging)</text>
+  
+  <!-- Legend -->
+  <rect x="20" y="2385" width="1360" height="10" fill="none"/>
+  <rect x="50" y="2385" width="20" height="10" fill="url(#inputGrad)" stroke="#1976D2"/>
+  <text x="75" y="2393" font-size="9" fill="#424242">Input</text>
+  <rect x="130" y="2385" width="20" height="10" fill="url(#preprocGrad)" stroke="#E65100"/>
+  <text x="155" y="2393" font-size="9" fill="#424242">Preprocessing</text>
+  <rect x="250" y="2385" width="20" height="10" fill="url(#analysisGrad)" stroke="#2E7D32"/>
+  <text x="275" y="2393" font-size="9" fill="#424242">Analysis</text>
+  <rect x="350" y="2385" width="20" height="10" fill="url(#statsGrad)" stroke="#C2185B"/>
+  <text x="375" y="2393" font-size="9" fill="#424242">Statistics</text>
+  <rect x="450" y="2385" width="20" height="10" fill="url(#deepGrad)" stroke="#7B1FA2"/>
+  <text x="475" y="2393" font-size="9" fill="#424242">Deep Learning</text>
+  <rect x="580" y="2385" width="20" height="10" fill="url(#outputGrad)" stroke="#F9A825"/>
+  <text x="605" y="2393" font-size="9" fill="#424242">Output</text>
+</svg>

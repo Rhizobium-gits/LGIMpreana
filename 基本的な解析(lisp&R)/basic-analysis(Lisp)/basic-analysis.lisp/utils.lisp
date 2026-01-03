@@ -1,97 +1,80 @@
 ;;;; ============================================================
-;;;; Microbiome Basic Analysis - Utilities
-;;;; Figure 1-7: 基本解析用ユーティリティ
+;;;; Utilities
 ;;;; ============================================================
 
 (in-package :microbiome-basic)
 
-;;; ベクトル操作
+;;; Vector operations
 (defun sum-vector (vec)
-  "ベクトルの合計"
   (reduce #'+ vec :initial-value 0.0d0))
 
 (defun normalize-vector (vec)
-  "ベクトルを正規化（相対存在量に変換）"
   (let ((total (sum-vector vec)))
     (if (zerop total)
         (make-array (length vec) :initial-element 0.0d0)
         (map 'vector (lambda (x) (/ (coerce x 'double-float) total)) vec))))
 
-;;; 行列操作
+;;; Matrix operations
 (defun make-matrix (rows cols &optional (initial 0.0d0))
-  "2次元配列（行列）を作成"
   (make-array (list rows cols) :initial-element initial :element-type 'double-float))
 
-(defun matrix-rows (m)
-  (array-dimension m 0))
-
-(defun matrix-cols (m)
-  (array-dimension m 1))
+(defun matrix-rows (m) (array-dimension m 0))
+(defun matrix-cols (m) (array-dimension m 1))
 
 (defun matrix-row (m i)
-  "行列のi行目をベクトルとして取得"
   (let* ((cols (matrix-cols m))
          (row (make-array cols :element-type 'double-float)))
     (dotimes (j cols row)
       (setf (aref row j) (aref m i j)))))
 
-;;; 統計関数
+;;; Statistics
 (defun mean (values)
-  "平均"
   (let ((lst (if (listp values) values (coerce values 'list))))
-    (/ (reduce #'+ lst) (length lst))))
+    (if (null lst) 0.0d0 (/ (reduce #'+ lst) (length lst)))))
 
 (defun variance (values)
-  "分散"
   (let* ((lst (if (listp values) values (coerce values 'list)))
          (m (mean lst))
          (n (length lst)))
-    (if (<= n 1)
-        0.0d0
-        (/ (reduce #'+ (mapcar (lambda (x) (expt (- x m) 2)) lst))
-           (1- n)))))
+    (if (<= n 1) 0.0d0
+        (/ (reduce #'+ (mapcar (lambda (x) (expt (- x m) 2)) lst)) (1- n)))))
 
 (defun standard-deviation (values)
-  "標準偏差"
   (sqrt (variance values)))
 
-;;; シャッフル
 (defun fisher-yates-shuffle (sequence)
-  "Fisher-Yatesシャッフル"
   (let ((seq (copy-seq sequence)))
     (loop for i from (1- (length seq)) downto 1
           for j = (random (1+ i))
           do (rotatef (elt seq i) (elt seq j)))
     seq))
 
-;;; CSV読み込み
-(defun parse-csv-line (line)
-  "CSV行をパース"
-  (cl-ppcre:split "," line))
+;;; CSV parsing
+(defun split-string (delimiter string)
+  (let ((result '())
+        (start 0)
+        (delim-char (if (stringp delimiter) (char delimiter 0) delimiter)))
+    (loop for i from 0 below (length string)
+          when (char= (char string i) delim-char)
+          do (push (subseq string start i) result)
+             (setf start (1+ i)))
+    (push (subseq string start) result)
+    (nreverse result)))
 
 (defun load-csv (filepath)
-  "CSVファイルを読み込み"
   (with-open-file (stream filepath :direction :input)
-    (let ((header (parse-csv-line (read-line stream)))
+    (let ((header (split-string "," (read-line stream)))
           (data '()))
       (loop for line = (read-line stream nil nil)
             while line
-            do (push (parse-csv-line line) data))
+            do (push (split-string "," line) data))
       (values header (nreverse data)))))
 
-;;; データ構造
+;;; Data structure
 (defstruct microbiome-data
-  "腸内細菌データ構造"
-  sample-ids
-  taxa
-  abundance
-  gravity
-  time
-  donor
-  replicate)
+  sample-ids taxa abundance gravity time donor replicate)
 
 (defun load-microbiome-data (filepath)
-  "腸内細菌データを読み込み"
   (multiple-value-bind (header rows) (load-csv filepath)
     (let* ((n-samples (length rows))
            (taxa-start 7)
@@ -104,45 +87,33 @@
            (donors (make-array n-samples))
            (replicates (make-array n-samples)))
       
-      (loop for row in rows
-            for i from 0
+      (loop for row in rows for i from 0
             do (setf (aref sample-ids i) (nth 0 row))
-               (setf (aref donors i) (parse-integer (nth 2 row) :junk-allowed t))
+               (setf (aref donors i) (or (parse-integer (nth 2 row) :junk-allowed t) 1))
                (setf (aref gravity i) (nth 3 row))
                (setf (aref time-points i) (nth 4 row))
-               (setf (aref replicates i) (parse-integer (nth 5 row) :junk-allowed t))
+               (setf (aref replicates i) (or (parse-integer (nth 5 row) :junk-allowed t) 1))
                (loop for j from 0 below n-taxa
                      for val = (nth (+ taxa-start j) row)
                      do (setf (aref abundance i j) 
                               (coerce (or (parse-integer val :junk-allowed t) 0) 'double-float))))
       
       (make-microbiome-data
-       :sample-ids sample-ids
-       :taxa taxa
-       :abundance abundance
-       :gravity gravity
-       :time time-points
-       :donor donors
-       :replicate replicates))))
+       :sample-ids sample-ids :taxa taxa :abundance abundance
+       :gravity gravity :time time-points :donor donors :replicate replicates))))
 
 (defun get-relative-abundance (data)
-  "相対存在量に変換"
   (let* ((abundance (microbiome-data-abundance data))
          (n-samples (matrix-rows abundance))
          (n-taxa (matrix-cols abundance))
          (rel-abundance (make-matrix n-samples n-taxa)))
     (dotimes (i n-samples rel-abundance)
-      (let* ((row (matrix-row abundance i))
-             (total (sum-vector row)))
+      (let ((total (loop for j from 0 below n-taxa sum (aref abundance i j))))
         (dotimes (j n-taxa)
           (setf (aref rel-abundance i j)
-                (if (zerop total)
-                    0.0d0
-                    (/ (aref abundance i j) total))))))))
+                (if (zerop total) 0.0d0 (/ (aref abundance i j) total))))))))
 
-;;; フィルタリング
 (defun filter-samples (data predicate)
-  "条件に合うサンプルをフィルタリング"
   (let ((indices '()))
     (dotimes (i (length (microbiome-data-sample-ids data)))
       (when (funcall predicate 
@@ -153,7 +124,6 @@
     (nreverse indices)))
 
 (defun subset-data (data indices)
-  "データのサブセットを作成"
   (let* ((n (length indices))
          (n-taxa (matrix-cols (microbiome-data-abundance data)))
          (new-abundance (make-matrix n n-taxa))
@@ -162,8 +132,7 @@
          (new-time (make-array n))
          (new-donor (make-array n))
          (new-replicate (make-array n)))
-    (loop for idx in indices
-          for i from 0
+    (loop for idx in indices for i from 0
           do (setf (aref new-sample-ids i) (aref (microbiome-data-sample-ids data) idx))
              (setf (aref new-gravity i) (aref (microbiome-data-gravity data) idx))
              (setf (aref new-time i) (aref (microbiome-data-time data) idx))
@@ -173,10 +142,24 @@
                (setf (aref new-abundance i j) 
                      (aref (microbiome-data-abundance data) idx j))))
     (make-microbiome-data
-     :sample-ids new-sample-ids
-     :taxa (microbiome-data-taxa data)
-     :abundance new-abundance
-     :gravity new-gravity
-     :time new-time
-     :donor new-donor
-     :replicate new-replicate)))
+     :sample-ids new-sample-ids :taxa (microbiome-data-taxa data)
+     :abundance new-abundance :gravity new-gravity :time new-time
+     :donor new-donor :replicate new-replicate)))
+
+;;; Bray-Curtis distance
+(defun bray-curtis-distance (v1 v2)
+  (let ((sum-min 0.0d0) (sum-total 0.0d0))
+    (dotimes (i (length v1))
+      (incf sum-min (min (aref v1 i) (aref v2 i)))
+      (incf sum-total (+ (aref v1 i) (aref v2 i))))
+    (if (zerop sum-total) 0.0d0 (- 1.0d0 (/ (* 2.0d0 sum-min) sum-total)))))
+
+(defun distance-matrix (abundance)
+  (let* ((n (matrix-rows abundance))
+         (dist (make-matrix n n)))
+    (dotimes (i n dist)
+      (dotimes (j n)
+        (if (= i j)
+            (setf (aref dist i j) 0.0d0)
+            (setf (aref dist i j) 
+                  (bray-curtis-distance (matrix-row abundance i) (matrix-row abundance j))))))))

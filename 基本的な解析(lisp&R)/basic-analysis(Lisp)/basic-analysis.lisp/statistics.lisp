@@ -1,417 +1,318 @@
 ;;;; ============================================================
-;;;; Microbiome Basic Analysis - Statistical Tests
-;;;; PERMANOVA, SIMPER, BETADISPER
+;;;; Statistics for Basic Analysis
 ;;;; ============================================================
 
 (in-package :microbiome-basic)
 
-;;;; ============================================================
-;;;; PERMANOVA (Permutational Multivariate Analysis of Variance)
-;;;; ============================================================
+;;; ============================================================
+;;; PCoA (Principal Coordinates Analysis)
+;;; ============================================================
 
-(defun calculate-ss-within (dist-matrix groups)
-  "群内平方和を計算"
-  (let ((unique-groups (remove-duplicates (coerce groups 'list) :test #'equal))
-        (ss-within 0.0d0))
-    (dolist (g unique-groups ss-within)
-      (let ((indices (loop for i from 0 below (length groups)
-                           when (equal (aref groups i) g) collect i))
-            (group-ss 0.0d0))
-        (let ((n-g (length indices)))
-          (when (> n-g 1)
-            (dolist (i indices)
-              (dolist (j indices)
-                (when (< i j)
-                  (incf group-ss (expt (aref dist-matrix i j) 2)))))
-            (incf ss-within (/ group-ss n-g))))))))
+(defun center-distance-matrix (dist)
+  (let* ((n (matrix-rows dist))
+         (centered (make-matrix n n))
+         (row-means (make-array n :initial-element 0.0d0))
+         (col-means (make-array n :initial-element 0.0d0))
+         (grand-mean 0.0d0))
+    
+    (dotimes (i n)
+      (dotimes (j n)
+        (let ((d2 (* -0.5d0 (expt (aref dist i j) 2))))
+          (incf (aref row-means i) d2)
+          (incf (aref col-means j) d2)
+          (incf grand-mean d2))))
+    
+    (dotimes (i n)
+      (setf (aref row-means i) (/ (aref row-means i) n))
+      (setf (aref col-means i) (/ (aref col-means i) n)))
+    (setf grand-mean (/ grand-mean (* n n)))
+    
+    (dotimes (i n centered)
+      (dotimes (j n)
+        (setf (aref centered i j)
+              (+ (* -0.5d0 (expt (aref dist i j) 2))
+                 (- (aref row-means i))
+                 (- (aref col-means j))
+                 grand-mean))))
+    centered))
+
+(defun power-iteration (matrix n-dims &key (max-iter 1000) (tol 1.0d-10))
+  (let* ((n (matrix-rows matrix))
+         (eigenvalues (make-array n-dims :initial-element 0.0d0))
+         (eigenvectors (make-matrix n n-dims))
+         (work-matrix (make-matrix n n)))
+    
+    (dotimes (i n)
+      (dotimes (j n)
+        (setf (aref work-matrix i j) (aref matrix i j))))
+    
+    (dotimes (dim n-dims)
+      (let ((v (make-array n)))
+        (dotimes (i n) (setf (aref v i) (- (random 2.0d0) 1.0d0)))
+        
+        (let ((norm (sqrt (loop for i from 0 below n sum (expt (aref v i) 2)))))
+          (dotimes (i n) (setf (aref v i) (/ (aref v i) norm))))
+        
+        (dotimes (iter max-iter)
+          (let ((new-v (make-array n :initial-element 0.0d0)))
+            (dotimes (i n)
+              (dotimes (j n)
+                (incf (aref new-v i) (* (aref work-matrix i j) (aref v j)))))
+            
+            (let ((eigenvalue (loop for i from 0 below n sum (* (aref v i) (aref new-v i)))))
+              (setf (aref eigenvalues dim) eigenvalue))
+            
+            (let ((norm (sqrt (loop for i from 0 below n sum (expt (aref new-v i) 2)))))
+              (when (< norm 1.0d-15) (return))
+              (dotimes (i n) (setf (aref new-v i) (/ (aref new-v i) norm))))
+            
+            (let ((diff (loop for i from 0 below n sum (expt (- (aref new-v i) (aref v i)) 2))))
+              (setf v new-v)
+              (when (< diff tol) (return)))))
+        
+        (dotimes (i n) (setf (aref eigenvectors i dim) (aref v i)))
+        
+        (let ((lambda-val (aref eigenvalues dim)))
+          (dotimes (i n)
+            (dotimes (j n)
+              (decf (aref work-matrix i j)
+                    (* lambda-val (aref v i) (aref v j))))))))
+    
+    (values eigenvalues eigenvectors)))
+
+(defun pcoa (dist-matrix &key (n-dims 5))
+  (let ((centered (center-distance-matrix dist-matrix)))
+    (multiple-value-bind (eigenvalues eigenvectors)
+        (power-iteration centered n-dims)
+      
+      (let* ((n (matrix-rows dist-matrix))
+             (coords (make-matrix n n-dims))
+             (total-var (loop for i from 0 below n-dims 
+                             when (> (aref eigenvalues i) 0)
+                             sum (aref eigenvalues i)))
+             (var-explained (make-array n-dims :initial-element 0.0d0)))
+        
+        (dotimes (dim n-dims)
+          (let ((lambda-val (max 0.0d0 (aref eigenvalues dim))))
+            (setf (aref var-explained dim)
+                  (if (> total-var 0) (* 100.0d0 (/ lambda-val total-var)) 0.0d0))
+            (let ((scale (sqrt lambda-val)))
+              (dotimes (i n)
+                (setf (aref coords i dim) (* scale (aref eigenvectors i dim)))))))
+        
+        (values coords eigenvalues var-explained)))))
+
+;;; ============================================================
+;;; PERMANOVA
+;;; ============================================================
 
 (defun calculate-ss-total (dist-matrix)
-  "全平方和を計算"
   (let ((n (matrix-rows dist-matrix))
-        (ss-total 0.0d0))
+        (ss 0.0d0))
     (dotimes (i n)
       (loop for j from (1+ i) below n
-            do (incf ss-total (expt (aref dist-matrix i j) 2))))
-    (/ ss-total n)))
+            do (incf ss (expt (aref dist-matrix i j) 2))))
+    (/ ss n)))
 
-(defun calculate-pseudo-f (dist-matrix groups)
-  "Pseudo-F統計量を計算
-   
-   F = (SS_between / (a-1)) / (SS_within / (n-a))
-   
-   - a: グループ数
-   - n: サンプル数"
+(defun calculate-ss-within (dist-matrix groups)
+  (let ((group-indices (make-hash-table :test #'equal))
+        (ss 0.0d0))
+    (dotimes (i (length groups))
+      (push i (gethash (aref groups i) group-indices)))
+    (maphash (lambda (g indices)
+               (declare (ignore g))
+               (let ((n (length indices)))
+                 (when (> n 1)
+                   (loop for i in indices
+                         do (loop for j in indices
+                                  when (< i j)
+                                  do (incf ss (expt (aref dist-matrix i j) 2)))))))
+             group-indices)
+    (let ((n-total 0))
+      (maphash (lambda (g indices)
+                 (declare (ignore g))
+                 (incf n-total (length indices)))
+               group-indices)
+      (/ ss n-total))))
+
+(defun permanova (dist-matrix groups &key (n-perms 999))
   (let* ((n (length groups))
-         (unique-groups (remove-duplicates (coerce groups 'list) :test #'equal))
-         (a (length unique-groups))
          (ss-total (calculate-ss-total dist-matrix))
          (ss-within (calculate-ss-within dist-matrix groups))
-         (ss-between (- ss-total ss-within)))
-    (if (or (<= a 1) (<= n a) (zerop ss-within))
-        0.0d0
-        (/ (/ ss-between (1- a))
-           (/ ss-within (- n a))))))
-
-(defun calculate-r-squared (dist-matrix groups)
-  "R^2（決定係数）を計算
-   
-   R^2 = SS_between / SS_total"
-  (let* ((ss-total (calculate-ss-total dist-matrix))
-         (ss-within (calculate-ss-within dist-matrix groups))
-         (ss-between (- ss-total ss-within)))
-    (if (zerop ss-total)
-        0.0d0
-        (/ ss-between ss-total))))
-
-(defun permanova (dist-matrix groups &key (n-permutations 999) (verbose t))
-  "PERMANOVA (Permutational Multivariate Analysis of Variance)
-   
-   距離行列に基づく多変量分散分析
-   群間の有意差を検定
-   
-   - dist-matrix: 距離行列
-   - groups: 各サンプルのグループラベル
-   - n-permutations: 置換回数
-   - 戻り値: (pseudo-F, p-value, R^2)"
-  (let* ((observed-f (calculate-pseudo-f dist-matrix groups))
-         (observed-r2 (calculate-r-squared dist-matrix groups))
-         (n-greater 0)
-         (groups-list (coerce groups 'list)))
+         (ss-between (- ss-total ss-within))
+         (n-groups (length (remove-duplicates (coerce groups 'list) :test #'equal)))
+         (df-between (1- n-groups))
+         (df-within (- n df-between 1))
+         (ms-between (/ ss-between (max 1 df-between)))
+         (ms-within (/ ss-within (max 1 df-within)))
+         (f-stat (if (> ms-within 0) (/ ms-between ms-within) 0.0d0))
+         (r-squared (if (> ss-total 0) (/ ss-between ss-total) 0.0d0))
+         (n-greater 0))
     
-    (when verbose
-      (format t "~%=== PERMANOVA ===~%")
-      (format t "Running ~d permutations...~%" n-permutations))
-    
-    (dotimes (i n-permutations)
-      (let* ((permuted (coerce (fisher-yates-shuffle groups-list) 'vector))
-             (permuted-f (calculate-pseudo-f dist-matrix permuted)))
-        (when (>= permuted-f observed-f)
+    (dotimes (perm n-perms)
+      (let* ((perm-groups (fisher-yates-shuffle groups))
+             (perm-ss-within (calculate-ss-within dist-matrix perm-groups))
+             (perm-ss-between (- ss-total perm-ss-within))
+             (perm-ms-between (/ perm-ss-between (max 1 df-between)))
+             (perm-f (if (> ms-within 0) (/ perm-ms-between ms-within) 0.0d0)))
+        (when (>= perm-f f-stat)
           (incf n-greater))))
     
-    (let ((p-value (/ (1+ n-greater) (1+ n-permutations))))
-      (when verbose
-        (format t "~%Results:~%")
-        (format t "  Pseudo-F: ~,4f~%" observed-f)
-        (format t "  R-squared: ~,4f (~,2f% of variance explained)~%" 
-                observed-r2 (* 100 observed-r2))
-        (format t "  p-value: ~,4f~%" p-value)
-        (format t "  Significance: ~a~%" 
-                (cond ((< p-value 0.001) "***")
-                      ((< p-value 0.01) "**")
-                      ((< p-value 0.05) "*")
-                      (t "n.s."))))
-      
-      (values observed-f p-value observed-r2))))
+    (let ((p-value (/ (1+ n-greater) (1+ n-perms))))
+      (format t "~%=== PERMANOVA Results ===~%")
+      (format t "Pseudo-F: ~,4f~%" f-stat)
+      (format t "R²: ~,4f~%" r-squared)
+      (format t "p-value: ~,4f (~d permutations)~%" p-value n-perms)
+      (values f-stat r-squared p-value))))
 
-;;;; ============================================================
-;;;; SIMPER (Similarity Percentage Analysis)
-;;;; ============================================================
+;;; ============================================================
+;;; SIMPER
+;;; ============================================================
 
-(defun simper (data group1-label group2-label &key (top-n 10) (verbose t))
-  "SIMPER分析
-   
-   2群間の非類似度に対する各分類群の寄与率を計算
-   
-   - data: マイクロバイオームデータ
-   - group1-label, group2-label: 比較する2群のラベル
-   - top-n: 表示する上位分類群数
-   - 戻り値: (結果リスト, 平均非類似度)"
+(defun simper (data group1-name group2-name &key (top-n 10))
   (let* ((abundance (get-relative-abundance data))
          (gravity (microbiome-data-gravity data))
          (taxa (microbiome-data-taxa data))
          (n-taxa (length taxa))
-         (group1-indices (loop for i from 0 below (length gravity)
-                               when (equal (aref gravity i) group1-label)
-                                 collect i))
-         (group2-indices (loop for i from 0 below (length gravity)
-                               when (equal (aref gravity i) group2-label)
-                                 collect i)))
+         (group1-indices '())
+         (group2-indices '()))
     
-    (when (or (null group1-indices) (null group2-indices))
-      (format t "  Warning: One or both groups have no samples~%")
-      (return-from simper nil))
+    (dotimes (i (matrix-rows abundance))
+      (cond ((equal (aref gravity i) group1-name)
+             (push i group1-indices))
+            ((equal (aref gravity i) group2-name)
+             (push i group2-indices))))
     
-    (let ((contributions (make-array n-taxa :initial-element 0.0d0))
-          (total-dissim 0.0d0)
-          (n-comparisons 0))
-      
-      ;; 全ペア比較
+    (let ((contributions (make-array n-taxa :initial-element 0.0d0)))
       (dolist (i group1-indices)
         (dolist (j group2-indices)
-          (incf n-comparisons)
           (dotimes (k n-taxa)
-            (let ((diff (abs (- (aref abundance i k) (aref abundance j k)))))
-              (incf (aref contributions k) diff)
-              (incf total-dissim diff)))))
+            (incf (aref contributions k)
+                  (abs (- (aref abundance i k) (aref abundance j k)))))))
       
-      ;; 平均
-      (when (> n-comparisons 0)
-        (dotimes (k n-taxa)
-          (setf (aref contributions k) (/ (aref contributions k) n-comparisons)))
-        (setf total-dissim (/ total-dissim n-comparisons)))
+      (let ((n-pairs (* (length group1-indices) (length group2-indices))))
+        (when (> n-pairs 0)
+          (dotimes (k n-taxa)
+            (setf (aref contributions k) (/ (aref contributions k) n-pairs)))))
       
-      ;; ソート
       (let* ((indices (loop for i from 0 below n-taxa collect i))
-             (sorted-indices (sort indices #'> 
-                                   :key (lambda (i) (aref contributions i))))
-             (results '()))
+             (sorted-indices (sort indices #'> :key (lambda (i) (aref contributions i))))
+             (total-contrib (reduce #'+ contributions))
+             (cumulative 0.0d0))
         
-        (dolist (idx sorted-indices)
-          (push (list (nth idx taxa)
-                      (aref contributions idx)
-                      (if (> total-dissim 0)
-                          (* 100.0d0 (/ (aref contributions idx) total-dissim))
-                          0.0d0))
-                results))
-        (setf results (nreverse results))
+        (format t "~%=== SIMPER: ~a vs ~a ===~%" group1-name group2-name)
+        (format t "~30a ~10a ~10a~%" "Taxon" "Contrib%" "Cumul%")
+        (format t "~50,,,'-a~%" "")
         
-        (when verbose
-          (format t "~%=== SIMPER Analysis ===~%")
-          (format t "Comparison: ~a vs ~a~%" group1-label group2-label)
-          (format t "Average dissimilarity: ~,4f~%~%" total-dissim)
-          (format t "~30a ~12a ~12a ~12a~%" 
-                  "Taxon" "Contrib" "Contrib%" "Cumulative%")
-          (format t "~66,,,'-a~%" "")
-          
-          (let ((cumulative 0.0d0))
-            (loop for result in results
-                  for i from 0 below (min top-n (length results))
-                  do (let ((taxon (first result))
-                           (contrib (second result))
-                           (percent (third result)))
-                       (incf cumulative percent)
-                       (format t "~30a ~12,6f ~12,2f ~12,2f~%"
-                               (if (> (length taxon) 28)
-                                   (concatenate 'string (subseq taxon 0 25) "...")
-                                   taxon)
-                               contrib percent cumulative)))))
-        
-        (values results total-dissim)))))
+        (loop for idx in (subseq sorted-indices 0 (min top-n n-taxa))
+              for contrib = (* 100.0d0 (/ (aref contributions idx) (max total-contrib 1.0d-10)))
+              do (incf cumulative contrib)
+                 (format t "~30a ~10,2f ~10,2f~%"
+                         (nth idx taxa) contrib cumulative))))))
 
-(defun indicator-species (data target-group &key (top-n 10) (verbose t))
-  "Indicator Species Analysis
-   
-   特定グループの指標種を特定
-   IndVal = 特異性 × 忠実度
-   
-   - data: マイクロバイオームデータ
-   - target-group: 対象グループ
-   - top-n: 表示する上位分類群数"
-  (let* ((abundance (get-relative-abundance data))
-         (gravity (microbiome-data-gravity data))
-         (taxa (microbiome-data-taxa data))
-         (n-taxa (length taxa))
-         (target-indices (loop for i from 0 below (length gravity)
-                               when (equal (aref gravity i) target-group)
-                                 collect i))
-         (all-indices (loop for i from 0 below (length gravity) collect i))
-         (indvals (make-array n-taxa :initial-element 0.0d0)))
-    
-    (when (null target-indices)
-      (format t "  Warning: Target group has no samples~%")
-      (return-from indicator-species nil))
-    
-    ;; 各分類群のIndValを計算
-    (dotimes (k n-taxa)
-      (let ((group-sum 0.0d0)
-            (group-occurrences 0)
-            (total-sum 0.0d0)
-            (n-group (length target-indices)))
-        
-        (dolist (i target-indices)
-          (let ((val (aref abundance i k)))
-            (incf group-sum val)
-            (when (> val 0) (incf group-occurrences))))
-        
-        (dolist (i all-indices)
-          (incf total-sum (aref abundance i k)))
-        
-        (let ((specificity (if (zerop total-sum) 0.0d0 (/ group-sum total-sum)))
-              (fidelity (/ group-occurrences n-group)))
-          (setf (aref indvals k) (* specificity fidelity)))))
-    
-    ;; ソート
-    (let* ((indices (loop for i from 0 below n-taxa collect i))
-           (sorted-indices (sort indices #'> :key (lambda (i) (aref indvals i))))
-           (results '()))
-      
-      (dolist (idx sorted-indices)
-        (push (list (nth idx taxa) (aref indvals idx)) results))
-      (setf results (nreverse results))
-      
-      (when verbose
-        (format t "~%=== Indicator Species Analysis ===~%")
-        (format t "Target group: ~a~%~%" target-group)
-        (format t "~30a ~12a~%" "Taxon" "IndVal")
-        (format t "~42,,,'-a~%" "")
-        (loop for result in results
-              for i from 0 below (min top-n (length results))
-              do (format t "~30a ~12,4f~%"
-                         (let ((taxon (first result)))
-                           (if (> (length taxon) 28)
-                               (concatenate 'string (subseq taxon 0 25) "...")
-                               taxon))
-                         (second result))))
-      
-      results)))
+;;; ============================================================
+;;; BETADISPER
+;;; ============================================================
 
-;;;; ============================================================
-;;;; BETADISPER (Multivariate Dispersion Analysis)
-;;;; ============================================================
-
-(defun calculate-centroid (coords indices)
-  "グループの重心を計算"
-  (let* ((n (length indices))
+(defun betadisper (coords groups)
+  (let* ((n (matrix-rows coords))
          (n-dims (min 2 (matrix-cols coords)))
-         (centroid (make-array n-dims :initial-element 0.0d0)))
-    (dolist (i indices)
-      (dotimes (d n-dims)
-        (incf (aref centroid d) (aref coords i d))))
-    (dotimes (d n-dims centroid)
-      (setf (aref centroid d) (/ (aref centroid d) n)))))
-
-(defun distance-to-centroid (coords sample-idx centroid)
-  "サンプルから重心までの距離"
-  (let ((sum-sq 0.0d0)
-        (n-dims (length centroid)))
-    (dotimes (d n-dims (sqrt sum-sq))
-      (incf sum-sq (expt (- (aref coords sample-idx d) (aref centroid d)) 2)))))
-
-(defun betadisper (pcoa-coords groups &key (verbose t))
-  "Beta Dispersion分析
-   
-   各グループ内のベータ多様性（分散）を比較
-   
-   - pcoa-coords: PCoA座標
-   - groups: グループラベル
-   - 戻り値: (グループ別距離ハッシュ, 平均距離ハッシュ)"
-  (let* ((unique-groups (remove-duplicates (coerce groups 'list) :test #'equal))
-         (distances-by-group (make-hash-table :test #'equal))
-         (mean-distances (make-hash-table :test #'equal)))
+         (group-centroids (make-hash-table :test #'equal))
+         (group-counts (make-hash-table :test #'equal))
+         (distances-by-group (make-hash-table :test #'equal)))
     
-    (dolist (g unique-groups)
-      (let* ((indices (loop for i from 0 below (length groups)
-                            when (equal (aref groups i) g)
-                              collect i))
-             (centroid (calculate-centroid pcoa-coords indices))
-             (distances '()))
+    (dotimes (i n)
+      (let ((g (aref groups i)))
+        (unless (gethash g group-centroids)
+          (setf (gethash g group-centroids) (make-array n-dims :initial-element 0.0d0))
+          (setf (gethash g group-counts) 0))
+        (incf (gethash g group-counts))
+        (dotimes (d n-dims)
+          (incf (aref (gethash g group-centroids) d) (aref coords i d)))))
+    
+    (maphash (lambda (g centroid)
+               (let ((count (gethash g group-counts)))
+                 (dotimes (d n-dims)
+                   (setf (aref centroid d) (/ (aref centroid d) count)))))
+             group-centroids)
+    
+    (dotimes (i n)
+      (let* ((g (aref groups i))
+             (centroid (gethash g group-centroids))
+             (dist 0.0d0))
+        (dotimes (d n-dims)
+          (incf dist (expt (- (aref coords i d) (aref centroid d)) 2)))
+        (setf dist (sqrt dist))
+        (push dist (gethash g distances-by-group))))
+    
+    (let ((mean-distances (make-hash-table :test #'equal)))
+      (maphash (lambda (g dists)
+                 (setf (gethash g mean-distances) (mean dists)))
+               distances-by-group)
+      (values distances-by-group mean-distances))))
+
+(defun test-dispersion-homogeneity (distances-by-group)
+  (let ((all-distances '())
+        (group-labels '())
+        (group-means (make-hash-table :test #'equal))
+        (grand-mean 0.0d0)
+        (n-total 0)
+        (n-groups 0))
+    
+    (maphash (lambda (g dists)
+               (setf (gethash g group-means) (mean dists))
+               (dolist (d dists)
+                 (push d all-distances)
+                 (push g group-labels)
+                 (incf n-total))
+               (incf n-groups))
+             distances-by-group)
+    
+    (setf grand-mean (mean all-distances))
+    
+    (let ((ss-between 0.0d0)
+          (ss-within 0.0d0))
+      (maphash (lambda (g dists)
+                 (let ((group-mean (gethash g group-means))
+                       (n-g (length dists)))
+                   (incf ss-between (* n-g (expt (- group-mean grand-mean) 2)))
+                   (dolist (d dists)
+                     (incf ss-within (expt (- d group-mean) 2)))))
+               distances-by-group)
+      
+      (let* ((df-between (1- n-groups))
+             (df-within (- n-total n-groups))
+             (ms-between (/ ss-between (max 1 df-between)))
+             (ms-within (/ ss-within (max 1 df-within)))
+             (f-stat (if (> ms-within 0) (/ ms-between ms-within) 0.0d0))
+             (n-perms 999)
+             (n-greater 0))
         
-        (dolist (i indices)
-          (push (distance-to-centroid pcoa-coords i centroid) distances))
+        (dotimes (perm n-perms)
+          (let ((perm-labels (fisher-yates-shuffle (coerce group-labels 'vector)))
+                (perm-groups (make-hash-table :test #'equal)))
+            (loop for d in all-distances
+                  for i from 0
+                  do (push d (gethash (aref perm-labels i) perm-groups)))
+            (let ((perm-ss-between 0.0d0)
+                  (perm-ss-within 0.0d0))
+              (maphash (lambda (g dists)
+                         (when dists
+                           (let ((gm (mean dists))
+                                 (ng (length dists)))
+                             (incf perm-ss-between (* ng (expt (- gm grand-mean) 2)))
+                             (dolist (d dists)
+                               (incf perm-ss-within (expt (- d gm) 2))))))
+                       perm-groups)
+              (let ((perm-f (if (> perm-ss-within 0)
+                               (/ (/ perm-ss-between (max 1 df-between))
+                                  (/ perm-ss-within (max 1 df-within)))
+                               0.0d0)))
+                (when (>= perm-f f-stat)
+                  (incf n-greater))))))
         
-        (setf (gethash g distances-by-group) (nreverse distances))
-        (when distances
-          (setf (gethash g mean-distances) (mean distances)))))
-    
-    (when verbose
-      (format t "~%=== BETADISPER Analysis ===~%")
-      (format t "Distance to centroid by group:~%~%")
-      (format t "~15a ~10a ~10a ~10a~%" 
-              "Group" "N" "Mean" "SD")
-      (format t "~45,,,'-a~%" "")
-      
-      (dolist (g unique-groups)
-        (let* ((dists (gethash g distances-by-group))
-               (n (length dists))
-               (m (if dists (mean dists) 0.0d0))
-               (sd (if (> n 1) (standard-deviation dists) 0.0d0)))
-          (format t "~15a ~10d ~10,4f ~10,4f~%"
-                  g n m sd))))
-    
-    (values distances-by-group mean-distances)))
-
-(defun calculate-anova-f (values groups)
-  "1元配置ANOVAのF統計量"
-  (let* ((unique-groups (remove-duplicates (coerce groups 'list) :test #'equal))
-         (n (length values))
-         (k (length unique-groups))
-         (grand-mean (mean (coerce values 'list)))
-         (ss-between 0.0d0)
-         (ss-within 0.0d0))
-    
-    (dolist (g unique-groups)
-      (let* ((group-values (loop for i from 0 below n
-                                 when (equal (aref groups i) g)
-                                   collect (aref values i)))
-             (ng (length group-values))
-             (group-mean (if group-values (mean group-values) 0.0d0)))
-        (when (> ng 0)
-          (incf ss-between (* ng (expt (- group-mean grand-mean) 2)))
-          (dolist (v group-values)
-            (incf ss-within (expt (- v group-mean) 2))))))
-    
-    (if (or (zerop ss-within) (<= k 1) (<= n k))
-        0.0d0
-        (/ (/ ss-between (1- k))
-           (/ ss-within (- n k))))))
-
-(defun test-dispersion-homogeneity (distances-by-group &key (n-permutations 999) (verbose t))
-  "分散の均一性検定
-   
-   グループ間で分散が等しいかを置換検定で検定"
-  (let* ((groups (loop for k being the hash-keys of distances-by-group collect k))
-         (all-distances '())
-         (group-labels '()))
-    
-    (dolist (g groups)
-      (dolist (d (gethash g distances-by-group))
-        (push d all-distances)
-        (push g group-labels)))
-    (setf all-distances (coerce (nreverse all-distances) 'vector))
-    (setf group-labels (coerce (nreverse group-labels) 'vector))
-    
-    (let ((observed-f (calculate-anova-f all-distances group-labels))
-          (n-greater 0))
-      
-      (dotimes (i n-permutations)
-        (let* ((permuted-labels (coerce (fisher-yates-shuffle (coerce group-labels 'list)) 'vector))
-               (permuted-f (calculate-anova-f all-distances permuted-labels)))
-          (when (>= permuted-f observed-f)
-            (incf n-greater))))
-      
-      (let ((p-value (/ (1+ n-greater) (1+ n-permutations))))
-        (when verbose
-          (format t "~%Permutation test for homogeneity of dispersions:~%")
-          (format t "  F-statistic: ~,4f~%" observed-f)
-          (format t "  p-value: ~,4f~%" p-value)
-          (format t "  Interpretation: ~a~%"
-                  (if (< p-value 0.05)
-                      "Dispersions differ significantly between groups"
-                      "No significant difference in dispersions")))
-        
-        (values observed-f p-value)))))
-
-(defun dispersion-over-time (data &key (verbose t))
-  "時間経過による群集分散の変化"
-  (let* ((abundance (get-relative-abundance data))
-         (dist (distance-matrix abundance))
-         (time-points (microbiome-data-time data))
-         (gravity (microbiome-data-gravity data))
-         (unique-times (remove-duplicates (coerce time-points 'list) :test #'equal))
-         (unique-gravity (remove-duplicates (coerce gravity 'list) :test #'equal)))
-    
-    (multiple-value-bind (coords eigenvalues var-explained)
-        (pcoa dist)
-      (declare (ignore eigenvalues var-explained))
-      
-      (when verbose
-        (format t "~%=== Dispersion Over Time ===~%")
-        (format t "~15a ~10a ~10a~%" "Gravity" "Time" "Mean Dist"))
-      
-      (let ((results '()))
-        (dolist (g unique-gravity)
-          (dolist (tp unique-times)
-            (let ((indices (loop for i from 0 below (length time-points)
-                                 when (and (equal (aref gravity i) g)
-                                           (equal (aref time-points i) tp))
-                                   collect i)))
-              (when (> (length indices) 1)
-                (let* ((centroid (calculate-centroid coords indices))
-                       (distances (mapcar (lambda (i) 
-                                            (distance-to-centroid coords i centroid))
-                                          indices))
-                       (mean-dist (mean distances)))
-                  (push (list g tp mean-dist) results)
-                  (when verbose
-                    (format t "~15a ~10a ~10,4f~%" g tp mean-dist)))))))
-        (nreverse results)))))
+        (let ((p-value (/ (1+ n-greater) (1+ n-perms))))
+          (format t "~%=== BETADISPER (Homogeneity of Dispersions) ===~%")
+          (format t "F-statistic: ~,4f~%" f-stat)
+          (format t "p-value: ~,4f~%" p-value)
+          (values f-stat p-value))))))
